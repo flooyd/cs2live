@@ -65,6 +65,8 @@
 		min-height: 100dvh;
 		display: grid;
 		grid-template-rows: auto 1fr auto;
+		/* minmax(0, 1fr): wide tables scroll inside their box instead of widening the page. */
+		grid-template-columns: minmax(0, 1fr);
 	}
 	.top {
 		display: flex;

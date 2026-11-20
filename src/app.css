@@ -25,6 +25,16 @@
 	--warn: #ffcc4d;
 	--warn-soft: rgb(255 204 77 / 0.14);
 
+	/* Chart marks. Validated with the dataviz palette checker against --panel (dark band
+	   L 0.48-0.67, CVD dE 29): CT/T for sides, two neutral series hues for other pairs. */
+	--viz-ct: #3d8ef5;
+	--viz-t: #cf7f0f;
+	--viz-1: #199e70;
+	--viz-2: #9085e9;
+	--viz-single: #3d8ef5;
+	--viz-grid: #222b3c;
+	--viz-axis: #5d687c;
+
 	--radius: 10px;
 	--radius-sm: 6px;
 	--font:

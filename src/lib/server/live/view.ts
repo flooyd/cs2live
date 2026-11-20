@@ -1,5 +1,6 @@
 // Builds the LiveView sent to the browser. Pure: everything comes in through ViewInput.
 import type { GsiPayload, GsiPlayer, GsiWeapon } from '../gsi/schema.ts';
+import { buildRoundPips } from '#lib/round-pips.ts';
 import type { MatchDraft, TrackerState } from '../gsi/match-tracker.ts';
 import type {
 	LiveView,
@@ -12,7 +13,7 @@ import type {
 } from '#lib/live/types.ts';
 import { BOMB_TIMER_S, ROUND_OVER_S, mapLabel, modeInfo } from '#lib/cs2/modes.ts';
 import { estimateNextRoundMoney } from '#lib/cs2/economy.ts';
-import { asSide, parseWinReason, roundWinsList, type Side } from '#lib/cs2/rounds.ts';
+import { asSide, parseWinReason, type Side } from '#lib/cs2/rounds.ts';
 import { isPrimaryType, weaponLabel } from '#lib/cs2/weapons.ts';
 import { derivedRates } from '#lib/match-record.ts';
 import {
@@ -315,30 +316,11 @@ function bombTimer(p: GsiPayload, at: number, clock: PhaseClock): TimerView | nu
 }
 
 function history(p: GsiPayload, match: MatchDraft | null): RoundPip[] {
-	const mode = modeInfo(p.map?.mode);
 	const sides = new Map<number, Side | null>();
 	for (const r of match?.rounds.finished ?? []) sides.set(r.number, r.mySide);
 	const current = match?.rounds.current;
 	if (current) sides.set(current.number, current.mySide);
-
-	const list = roundWinsList(p.map?.round_wins);
-	return list.map((w, i) => {
-		const mySide = sides.get(w.round) ?? null;
-		const prevSide = i > 0 ? (sides.get(list[i - 1].round) ?? null) : null;
-		const ruleSwitch =
-			mode.halfLength !== null && mode.regulationRounds !== null && w.round === mode.halfLength + 1;
-		const otStart = mode.regulationRounds !== null && w.round === mode.regulationRounds + 1;
-		return {
-			round: w.round,
-			winner: w.side,
-			kind: w.kind,
-			reason: w.reason,
-			mySide,
-			iWon: mySide && w.side ? mySide === w.side : null,
-			switchBefore: (mySide && prevSide ? mySide !== prevSide : ruleSwitch) || otStart,
-			overtime: mode.regulationRounds !== null && w.round > mode.regulationRounds
-		};
-	});
+	return buildRoundPips(p.map?.mode, p.map?.round_wins, sides);
 }
 
 function recentRounds(match: MatchDraft | null): LiveView['recentRounds'] {
