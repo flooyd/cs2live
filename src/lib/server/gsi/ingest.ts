@@ -30,6 +30,7 @@ export function ingest(
 		rt.recorder?.record(at, raw, headers);
 		const p = parsePayload(raw);
 		if (!p) return { ok: false, reason: 'payload is not a JSON object' };
+		rt.raw?.add(at, raw);
 		rt.applyPayload(p, at);
 		const events = rt.tracker.ingest(p, at);
 		rt.handleEvents(events, at);

@@ -4,6 +4,8 @@ import { config, liveEnabled } from '../config.ts';
 import { LiveRuntime } from './runtime.ts';
 import { SettingsFile } from './settings.ts';
 import { createOutbox } from '../sync/index.ts';
+import { getDb } from '../db/index.ts';
+import { RawPayloadBuffer } from '../db/raw-payloads.ts';
 
 const TICK_MS = 5000;
 
@@ -15,8 +17,13 @@ function create(): LiveRuntime {
 		siteUrl: config.envSiteUrl,
 		uploadKey: config.envUploadKey
 	});
+	const db = getDb();
+	if (config.storeRawPayloads && !db) {
+		console.warn('[live] STORE_RAW_PAYLOADS needs DATABASE_URL on this copy; ignoring it.');
+	}
 	const rt = new LiveRuntime({
 		settings,
+		raw: config.storeRawPayloads && db ? new RawPayloadBuffer(db) : null,
 		gsiToken: config.gsiToken,
 		capture: config.capture,
 		captureDir: config.captureDir,

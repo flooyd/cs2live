@@ -59,7 +59,19 @@ export default defineConfig({
 					name: 'server',
 					environment: 'node',
 					include: ['src/**/*.{test,spec}.{js,ts}', 'scripts/**/*.{test,spec}.ts'],
-					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
+					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}', 'src/**/*.db.spec.ts']
+				}
+			},
+
+			{
+				// Database tests share one TEST_DATABASE_URL, so they run one file at a time.
+				// Skipped when TEST_DATABASE_URL is not set.
+				extends: './vite.config.ts',
+				test: {
+					name: 'db',
+					environment: 'node',
+					include: ['src/**/*.db.spec.ts'],
+					fileParallelism: false
 				}
 			}
 		]

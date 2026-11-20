@@ -36,12 +36,12 @@ const dateTimeFmt = new Intl.DateTimeFormat('en-GB', {
 	minute: '2-digit'
 });
 
-export function date(value: string | Date | null | undefined): string {
+export function date(value: string | number | Date | null | undefined): string {
 	if (!value) return '—';
 	return dateFmt.format(new Date(value));
 }
 
-export function dateTime(value: string | Date | null | undefined): string {
+export function dateTime(value: string | number | Date | null | undefined): string {
 	if (!value) return '—';
 	return dateTimeFmt.format(new Date(value));
 }

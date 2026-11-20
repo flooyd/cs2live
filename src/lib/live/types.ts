@@ -80,6 +80,8 @@ export interface SyncView {
 	mode: 'direct' | 'upload' | 'none';
 	target: string | null;
 	pending: number;
+	/** Matches the target refused, kept in outbox/rejected/. */
+	rejected: number;
 	lastError: string | null;
 	lastSyncedAt: number | null;
 	lastSyncedMatchId: string | null;

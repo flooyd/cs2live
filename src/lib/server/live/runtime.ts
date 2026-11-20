@@ -9,6 +9,7 @@ import { buildLiveView, type PhaseClock } from './view.ts';
 import type { SettingsFile } from './settings.ts';
 import type { LiveView, SyncView } from '#lib/live/types.ts';
 import type { MatchRecord } from '#lib/match-record.ts';
+import type { RawPayloadSink } from '../db/raw-payloads.ts';
 
 /** Where finished matches go (the outbox, which uploads or writes to the database). */
 export interface MatchSink {
@@ -25,6 +26,7 @@ export const NULL_SINK: MatchSink = {
 		mode: 'none',
 		target: null,
 		pending: 0,
+		rejected: 0,
 		lastError: null,
 		lastSyncedAt: null,
 		lastSyncedMatchId: null
@@ -39,6 +41,8 @@ export interface RuntimeOptions {
 	incompleteTimeoutMs: number;
 	appVersion: string;
 	sink?: MatchSink;
+	/** Optional raw payload storage (STORE_RAW_PAYLOADS=1 with a database). */
+	raw?: RawPayloadSink | null;
 	/** Minimum gap between SSE broadcasts. */
 	broadcastMs?: number;
 }
@@ -49,6 +53,7 @@ export class LiveRuntime {
 	readonly recorder: GsiRecorder | null;
 	readonly gsiToken: string | null;
 	sink: MatchSink;
+	readonly raw: RawPayloadSink | null;
 
 	latest: GsiPayload | null = null;
 	latestAt: number | null = null;
@@ -73,6 +78,7 @@ export class LiveRuntime {
 		this.settings = opts.settings;
 		this.gsiToken = opts.gsiToken;
 		this.sink = opts.sink ?? NULL_SINK;
+		this.raw = opts.raw ?? null;
 		this.broadcastMs = opts.broadcastMs ?? 100;
 		this.recorder = opts.capture ? new GsiRecorder(opts.captureDir, opts.appVersion) : null;
 		this.tracker = new MatchTracker({
@@ -125,9 +131,11 @@ export class LiveRuntime {
 					);
 					this.lastSaved = { matchId: e.record.id, at };
 					this.sink.enqueue(e.record);
+					void this.raw?.save(e.record.id);
 					break;
 				case 'match_discarded':
 					console.log(`[live] match discarded (${e.reason}): ${e.matchId}`);
+					this.raw?.clear();
 					break;
 			}
 		}

@@ -9,9 +9,22 @@ import { getDb, type Db } from '#lib/server/db/index.ts';
 import { user } from '#lib/server/db/auth.schema.ts';
 import { signupAllowed } from './signup.ts';
 
+/** ORIGIN, plus its localhost <-> 127.0.0.1 twin, so a local copy works on either address. */
+function trustedOrigins(origin: string | undefined): string[] {
+	if (!origin) return [];
+	try {
+		const u = new URL(origin);
+		const twin = { localhost: '127.0.0.1', '127.0.0.1': 'localhost' }[u.hostname];
+		return twin ? [u.origin, `${u.protocol}//${twin}${u.port ? `:${u.port}` : ''}`] : [u.origin];
+	} catch {
+		return [];
+	}
+}
+
 function build(db: Db) {
 	return betterAuth({
 		baseURL: ORIGIN,
+		trustedOrigins: trustedOrigins(ORIGIN),
 		secret: BETTER_AUTH_SECRET,
 		database: drizzleAdapter(db, { provider: 'pg' }),
 		emailAndPassword: { enabled: true },

@@ -9,25 +9,49 @@
 		error?: string | null;
 		/** Where to go after saving. */
 		redirectTo?: string;
+		/** Form action; it reads a `steamId` field and fails with `{ steamIdError }`. */
+		action?: string;
+		/** Shown when `locked` (the Steam ID comes from the environment). */
+		lockedMessage?: string;
 	}
 
-	let { detected, current, locked = false, error = null, redirectTo }: Props = $props();
+	let {
+		detected,
+		current,
+		locked = false,
+		error = null,
+		redirectTo,
+		action = '/setup?/steamId',
+		lockedMessage
+	}: Props = $props();
 	let value = $state('');
 	let busy = $state(false);
+	// The action can live on another page (/live posts to /setup), whose `form` prop this page
+	// never sees, so keep the error from the result here too.
+	let localError = $state<string | null>(null);
+	const shownError = $derived(localError ?? error);
 </script>
 
 {#if locked}
 	<p class="muted">
-		Your Steam ID is set by the <code>STEAM_ID</code> environment variable: <code>{current}</code>.
+		{#if lockedMessage}{lockedMessage}{:else}Your Steam ID is set by the <code>STEAM_ID</code>
+			environment variable: <code>{current}</code>.{/if}
 	</p>
 {:else}
 	<form
 		method="POST"
-		action="/setup?/steamId"
+		{action}
 		use:enhance={() => {
 			busy = true;
-			return async ({ update }) => {
+			return async ({ result, update }) => {
 				busy = false;
+				const message = result.type === 'failure' ? result.data?.steamIdError : null;
+				localError =
+					result.type !== 'failure'
+						? null
+						: typeof message === 'string'
+							? message
+							: 'Could not save that Steam ID.';
 				await update();
 			};
 		}}
@@ -65,10 +89,10 @@
 		<p class="hint">
 			Paste your SteamID64, your profile link (<code>steamcommunity.com/profiles/…</code>),
 			<code>[U:1:…]</code> or <code>STEAM_0:…</code>. Custom profile links (<code>/id/name</code>)
-			can't be resolved without a Steam API key; on your Steam profile use "Copy Page URL" while
-			custom URL is off, or check steamid.io.
+			can't be looked up without a Steam API key. Your SteamID64 is in the Steam client under
+			Account details, or paste your custom link into steamid.io.
 		</p>
-		{#if error}<p class="error">{error}</p>{/if}
+		{#if shownError}<p class="error" role="alert">{shownError}</p>{/if}
 	</form>
 {/if}
 

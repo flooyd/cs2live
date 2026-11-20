@@ -15,8 +15,13 @@ export interface SyncTarget {
 	send(record: MatchRecord): Promise<void>;
 }
 
-/** A send failure that retrying will not fix (bad key, rejected record). */
+/** The target refused this match itself (invalid, or owned by someone else). Retrying won't help,
+ * so the file moves to outbox/rejected/ for a person to look at. */
 export class PermanentSyncError extends Error {}
+
+/** The target refused the credentials (bad or revoked upload key). Every match would fail the
+ * same way, so sending stops and the files stay queued until the settings change. */
+export class AuthSyncError extends Error {}
 
 const RETRY_MS = [15_000, 30_000, 60_000, 120_000, 300_000, 600_000];
 
@@ -31,6 +36,7 @@ export class Outbox implements MatchSink {
 	private lastError: string | null = null;
 	private lastSyncedAt: number | null = null;
 	private lastSyncedMatchId: string | null = null;
+	private rejected = 0;
 	private ready: Promise<void>;
 
 	constructor(
@@ -50,6 +56,7 @@ export class Outbox implements MatchSink {
 			for (const f of await readdir(this.dir)) {
 				if (f.endsWith('.json')) this.pending.add(f.slice(0, -5));
 			}
+			this.rejected = (await readdir(join(this.dir, 'rejected')).catch(() => [])).length;
 			if (this.pending.size) {
 				console.log(`[sync] ${this.pending.size} match(es) waiting in ${this.dir}`);
 				void this.flush();
@@ -111,10 +118,13 @@ export class Outbox implements MatchSink {
 				this.lastError = null;
 				console.log(`[sync] saved match ${id} (${target.label})`);
 			} catch (err) {
-				failed = true;
 				this.lastError = (err as Error).message;
 				console.error(`[sync] could not save match ${id}:`, this.lastError);
-				if (err instanceof PermanentSyncError) continue;
+				if (err instanceof PermanentSyncError) {
+					await this.reject(id);
+					continue;
+				}
+				failed = true;
 				break;
 			}
 		}
@@ -129,12 +139,25 @@ export class Outbox implements MatchSink {
 		this.onChange();
 	}
 
+	private async reject(id: string) {
+		try {
+			await mkdir(join(this.dir, 'rejected'), { recursive: true });
+			await rename(join(this.dir, `${id}.json`), join(this.dir, 'rejected', `${id}.json`));
+			this.pending.delete(id);
+			this.rejected++;
+			this.lastError += ` (kept in ${join(this.dir, 'rejected')})`;
+		} catch (err) {
+			console.error('[sync] could not move a rejected match:', err);
+		}
+	}
+
 	status(): SyncView {
 		const target = this.resolveTarget();
 		return {
 			mode: target?.mode ?? 'none',
 			target: target?.label ?? null,
 			pending: this.pending.size,
+			rejected: this.rejected,
 			lastError: this.lastError,
 			lastSyncedAt: this.lastSyncedAt,
 			lastSyncedMatchId: this.lastSyncedMatchId
@@ -175,7 +198,11 @@ export function uploadTarget(
 				// Not JSON; keep the text.
 			}
 			const text = `Upload rejected (${res.status}): ${message || res.statusText}`;
-			// 4xx other than 408/429 means the request itself is wrong; retrying won't help.
+			// 401/403: the key is wrong or belongs to another Steam ID. Fix it in /setup.
+			if (res.status === 401 || res.status === 403) throw new AuthSyncError(text);
+			// 404: no upload API at that URL (wrong site URL, or a site without a database).
+			if (res.status === 404) throw new AuthSyncError(`${text}. Check the site URL in /setup.`);
+			// Other 4xx (but not 408/429) means this match itself was refused.
 			if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
 				throw new PermanentSyncError(text);
 			}
