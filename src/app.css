@@ -1,0 +1,231 @@
+/* CS2Live design tokens. Dark, high contrast, CT blue and T amber used consistently. */
+:root {
+	color-scheme: dark;
+	--bg: #0a0d13;
+	--bg-2: #0e121a;
+	--panel: #121824;
+	--panel-2: #18202f;
+	--line: #222b3c;
+	--line-2: #2e3a50;
+	--text: #e8edf5;
+	--muted: #8d99ae;
+	--dim: #5d687c;
+
+	--ct: #5ea8ff;
+	--ct-strong: #3d8ef5;
+	--ct-soft: rgb(94 168 255 / 0.14);
+	--t: #f2a541;
+	--t-strong: #e08a14;
+	--t-soft: rgb(242 165 65 / 0.14);
+
+	--win: #3ddc97;
+	--win-soft: rgb(61 220 151 / 0.14);
+	--loss: #ff5d6c;
+	--loss-soft: rgb(255 93 108 / 0.14);
+	--warn: #ffcc4d;
+	--warn-soft: rgb(255 204 77 / 0.14);
+
+	--radius: 10px;
+	--radius-sm: 6px;
+	--font:
+		'Segoe UI Variable Text', 'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial,
+		sans-serif;
+	--font-display: 'Segoe UI Variable Display', 'Segoe UI', Inter, system-ui, sans-serif;
+	--mono: 'Cascadia Mono', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font-family: var(--font);
+	font-size: 15px;
+	line-height: 1.45;
+	-webkit-font-smoothing: antialiased;
+}
+
+a {
+	color: var(--ct);
+	text-decoration: none;
+}
+a:hover {
+	text-decoration: underline;
+}
+
+h1,
+h2,
+h3 {
+	font-family: var(--font-display);
+	line-height: 1.15;
+	margin: 0;
+}
+
+button,
+input,
+select {
+	font: inherit;
+	color: inherit;
+}
+
+.num {
+	font-variant-numeric: tabular-nums;
+}
+
+.ct {
+	color: var(--ct);
+}
+.t {
+	color: var(--t);
+}
+.win {
+	color: var(--win);
+}
+.loss {
+	color: var(--loss);
+}
+.muted {
+	color: var(--muted);
+}
+.dim {
+	color: var(--dim);
+}
+
+.label {
+	font-size: 0.72rem;
+	font-weight: 600;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+	color: var(--muted);
+}
+
+/* Inferred / estimated values get a dotted underline and a tooltip explaining why. */
+.inferred {
+	text-decoration: underline dotted var(--dim);
+	text-underline-offset: 3px;
+	cursor: help;
+}
+
+.panel {
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+}
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4em;
+	padding: 0.5em 1em;
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--line-2);
+	background: var(--panel-2);
+	cursor: pointer;
+	font-weight: 600;
+}
+.btn:hover {
+	border-color: var(--ct);
+	text-decoration: none;
+}
+.btn.primary {
+	background: var(--ct-strong);
+	border-color: var(--ct-strong);
+	color: #fff;
+}
+.btn.primary:hover {
+	background: var(--ct);
+}
+.btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.input {
+	width: 100%;
+	padding: 0.55em 0.75em;
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--line-2);
+	background: var(--bg-2);
+}
+.input:focus {
+	outline: 2px solid var(--ct-strong);
+	outline-offset: 1px;
+	border-color: transparent;
+}
+
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35em;
+	padding: 0.1em 0.55em;
+	border-radius: 999px;
+	font-size: 0.78rem;
+	font-weight: 600;
+	background: var(--panel-2);
+	border: 1px solid var(--line-2);
+	white-space: nowrap;
+}
+.chip.win {
+	background: var(--win-soft);
+	border-color: transparent;
+}
+.chip.loss {
+	background: var(--loss-soft);
+	border-color: transparent;
+}
+.chip.warn {
+	background: var(--warn-soft);
+	border-color: transparent;
+	color: var(--warn);
+}
+.chip.ct {
+	background: var(--ct-soft);
+	border-color: transparent;
+}
+.chip.t {
+	background: var(--t-soft);
+	border-color: transparent;
+}
+
+table.data {
+	width: 100%;
+	border-collapse: collapse;
+	font-variant-numeric: tabular-nums;
+}
+table.data th {
+	text-align: left;
+	font-size: 0.72rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--muted);
+	padding: 0.55rem 0.6rem;
+	border-bottom: 1px solid var(--line);
+	white-space: nowrap;
+}
+table.data td {
+	padding: 0.5rem 0.6rem;
+	border-bottom: 1px solid var(--line);
+	white-space: nowrap;
+}
+table.data tr:hover td {
+	background: rgb(255 255 255 / 0.02);
+}
+table.data .r {
+	text-align: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		transition-duration: 0.01ms !important;
+	}
+}

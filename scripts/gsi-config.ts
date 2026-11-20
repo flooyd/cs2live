@@ -14,8 +14,8 @@ import {
 	writeFileSync
 } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { findCs2CfgDir } from './lib/cs2-paths.ts';
-import { renderGsiConfig, GSI_CONFIG_FILENAME } from './lib/gsi-template.ts';
+import { findCs2CfgDir } from '../src/lib/server/gsi/cs2-paths.ts';
+import { renderGsiConfig, GSI_CONFIG_FILENAME } from '../src/lib/server/gsi/gsi-template.ts';
 
 const args = new Set(process.argv.slice(2));
 const envFile = resolve('.env');

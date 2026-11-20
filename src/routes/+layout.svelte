@@ -1,4 +1,5 @@
 <script lang="ts">
+	import '../app.css';
 	import favicon from '#lib/assets/favicon.svg';
 	import type { LayoutProps } from './$types';
 
@@ -7,7 +8,6 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
-	<title>CS2Live</title>
 </svelte:head>
 
 {@render children()}

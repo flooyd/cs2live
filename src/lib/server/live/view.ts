@@ -12,7 +12,7 @@ import type {
 } from '#lib/live/types.ts';
 import { BOMB_TIMER_S, ROUND_OVER_S, mapLabel, modeInfo } from '#lib/cs2/modes.ts';
 import { estimateNextRoundMoney } from '#lib/cs2/economy.ts';
-import { asSide, roundWinsList, type Side } from '#lib/cs2/rounds.ts';
+import { asSide, parseWinReason, roundWinsList, type Side } from '#lib/cs2/rounds.ts';
 import { isPrimaryType, weaponLabel } from '#lib/cs2/weapons.ts';
 import { derivedRates } from '#lib/match-record.ts';
 import {
@@ -154,7 +154,8 @@ export function buildLiveView(input: ViewInput): LiveView {
 					health: pl.state?.health ?? null,
 					money: pl.state?.money ?? null
 				}))
-			: null
+			: null,
+		recentRounds: recentRounds(input.match)
 	};
 }
 
@@ -338,4 +339,27 @@ function history(p: GsiPayload, match: MatchDraft | null): RoundPip[] {
 			overtime: mode.regulationRounds !== null && w.round > mode.regulationRounds
 		};
 	});
+}
+
+function recentRounds(match: MatchDraft | null): LiveView['recentRounds'] {
+	if (!match) return [];
+	return match.rounds.finished
+		.slice(-12)
+		.reverse()
+		.map((r) => {
+			const reason = match.roundWins[String(r.number)] ?? null;
+			const winner = parseWinReason(reason).side ?? r.winnerSide;
+			return {
+				number: r.number,
+				mySide: r.mySide,
+				iWon: winner && r.mySide ? winner === r.mySide : r.iWon,
+				winKind: parseWinReason(reason).kind,
+				kills: r.kills,
+				hsKills: r.hsKills,
+				damage: r.damage,
+				survived: r.survived,
+				buyType: r.buyType,
+				equipValue: r.equipValue
+			};
+		});
 }

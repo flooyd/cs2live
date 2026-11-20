@@ -9,7 +9,8 @@ export const variables = defineEnvVars({
 	DATABASE_URL: {
 		description:
 			'Neon (or any Postgres) connection string. Set it on the Vercel site, and locally only if this copy should write straight to the database. Friends running CS2Live locally leave it empty and upload through the site instead.',
-		schema: optional
+		// The `sv create` placeholder (`...@host:port/db-name`) counts as not set.
+		schema: (value) => (!value || value.includes('@host:port/') ? undefined : value)
 	},
 	ORIGIN: {
 		description: 'The app origin (base URL), e.g. `http://localhost:5173` or your Vercel URL.',

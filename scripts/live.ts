@@ -5,9 +5,14 @@
 // faster, steadier option while you play.
 //
 // It wraps the adapter-node handler in a tiny server of our own for one reason: SvelteKit
-// rejects cross-site POSTs that have no Content-Type header (its CSRF guard), and game clients do
-// not send an Origin header. If CS2 ever posts without a Content-Type, every GSI update would
-// get a 403. We give /api/gsi requests a JSON content type when they arrive without one.
+// rejects cross-site POSTs whose Content-Type is missing or form-like (its CSRF guard), and game
+// clients do not send an Origin header. If CS2 ever posted that way, every GSI update would get
+// a 403. /api/gsi only accepts JSON and checks its own token, so we mark every request to it as
+// JSON.
+//
+// The build reads its adapter settings from CS2LIVE_NODE_* variables (see vite.config.ts), so
+// ORIGIN in .env, which is meant for the website, does not pin the local server to one host and
+// port: forms work whether you open localhost or 127.0.0.1.
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -36,11 +41,18 @@ if (!existsSync(handlerPath)) {
 	process.exit(1);
 }
 
+// Without an origin setting adapter-node assumes https. This server is plain http, so tell it
+// via a header only this wrapper sets (any incoming copy is overwritten below).
+const PROTO_HEADER = 'x-cs2live-proto';
+process.env.CS2LIVE_NODE_PROTOCOL_HEADER = PROTO_HEADER;
+delete process.env.CS2LIVE_NODE_ORIGIN;
+
 type NodeHandler = (req: IncomingMessage, res: ServerResponse) => void;
 const { handler } = (await import(pathToFileURL(handlerPath).href)) as { handler: NodeHandler };
 
 const server = createServer((req, res) => {
-	if (req.url?.startsWith('/api/gsi') && !req.headers['content-type']) {
+	req.headers[PROTO_HEADER] = 'http';
+	if (req.url === '/api/gsi' || req.url?.startsWith('/api/gsi?')) {
 		req.headers['content-type'] = 'application/json';
 	}
 	handler(req, res);

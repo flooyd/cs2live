@@ -9,8 +9,13 @@ import { sveltekit } from '@sveltejs/kit/vite';
 //   cannot hold the in-memory live state or a long-lived SSE stream, so live tracking is off there.
 // - Node (`CS2LIVE_ADAPTER=node`, used by `yarn live`): a long-running local server that receives
 //   CS2's GSI posts and streams live state to /live and /overlay.
+// The node build reads CS2LIVE_NODE_ORIGIN etc. instead of ORIGIN, which belongs to the website.
+// Without it, adapter-node takes the origin from the Host header, so the local forms pass the
+// CSRF check on localhost and 127.0.0.1 alike.
 const adapter =
-	process.env.CS2LIVE_ADAPTER === 'node' ? nodeAdapter({ out: 'build' }) : vercelAdapter();
+	process.env.CS2LIVE_ADAPTER === 'node'
+		? nodeAdapter({ out: 'build', envPrefix: 'CS2LIVE_NODE_' })
+		: vercelAdapter();
 
 export default defineConfig({
 	plugins: [
@@ -24,7 +29,10 @@ export default defineConfig({
 		})
 	],
 	server: {
-		// CS2 posts to 127.0.0.1; keep the dev server on the same port `yarn gsi:config` writes.
+		// CS2 posts to 127.0.0.1. On Windows Vite's default "localhost" can bind IPv6 (::1) only,
+		// which CS2 cannot reach, so bind IPv4 explicitly. Browsers still open localhost fine.
+		host: '127.0.0.1',
+		// Keep the dev server on the port `yarn gsi:config` writes into the cfg.
 		port: 5173,
 		strictPort: true
 	},

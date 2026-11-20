@@ -50,3 +50,11 @@ ${data}
 }
 `;
 }
+
+/** Reads the uri and token back out of an installed config (for the Setup page's checks). */
+export function readGsiConfig(text: string): { uri: string | null; token: string | null } {
+	return {
+		uri: text.match(/"uri"\s+"([^"]*)"/)?.[1] ?? null,
+		token: text.match(/"token"\s+"([^"]*)"/)?.[1] ?? null
+	};
+}

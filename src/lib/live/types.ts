@@ -96,6 +96,20 @@ export interface ObserverPlayerView {
 	money: number | null;
 }
 
+/** One of your finished rounds in the current match. */
+export interface RecentRound {
+	number: number;
+	mySide: Side | null;
+	iWon: boolean | null;
+	winKind: WinKind;
+	kills: number;
+	hsKills: number;
+	damage: number;
+	survived: boolean | null;
+	buyType: string | null;
+	equipValue: number | null;
+}
+
 export interface LiveView {
 	serverTime: number;
 	connection: {
@@ -170,4 +184,6 @@ export interface LiveView {
 		resetNext: boolean;
 	} | null;
 	allPlayers: ObserverPlayerView[] | null;
+	/** Your finished rounds this match, newest first. */
+	recentRounds: RecentRound[];
 }

@@ -13,11 +13,14 @@ import type { MatchRecord } from '#lib/match-record.ts';
 /** Where finished matches go (the outbox, which uploads or writes to the database). */
 export interface MatchSink {
 	enqueue(record: MatchRecord): void;
+	/** Try sending whatever is waiting now (after settings change). */
+	flush(): Promise<void>;
 	status(): SyncView;
 }
 
 export const NULL_SINK: MatchSink = {
 	enqueue: () => {},
+	flush: () => Promise.resolve(),
 	status: () => ({
 		mode: 'none',
 		target: null,
