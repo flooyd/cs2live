@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
+	import { navigating, page } from '$app/state';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
@@ -9,6 +9,9 @@
 	const active = (prefix: string) =>
 		prefix === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(prefix);
 </script>
+
+<!-- Shown only when a navigation takes longer than a moment (filters, paging, lookups). -->
+{#if navigating.to}<div class="progress" aria-hidden="true"></div>{/if}
 
 <div class="shell">
 	<header class="top">
@@ -47,7 +50,7 @@
 		</div>
 	</header>
 
-	<main>
+	<main aria-busy={navigating.to ? 'true' : undefined}>
 		{@render children()}
 	</main>
 
@@ -61,6 +64,36 @@
 </div>
 
 <style>
+	.progress {
+		position: fixed;
+		inset: 0 auto auto 0;
+		height: 2px;
+		width: 100%;
+		z-index: 50;
+		background: var(--ct-strong);
+		transform-origin: left;
+		transform: scaleX(0);
+		opacity: 0;
+		animation: progress 6s cubic-bezier(0.1, 0.7, 0.3, 1) 150ms forwards;
+	}
+	@keyframes progress {
+		from {
+			opacity: 1;
+			transform: scaleX(0.05);
+		}
+		to {
+			opacity: 1;
+			transform: scaleX(0.9);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.progress {
+			animation: none;
+			opacity: 1;
+			transform: scaleX(1);
+			background: color-mix(in srgb, var(--ct-strong) 50%, transparent);
+		}
+	}
 	.shell {
 		min-height: 100dvh;
 		display: grid;

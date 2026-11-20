@@ -26,3 +26,6 @@ vite.config.ts.timestamp-*
 .cs2live/
 # Raw GSI captures (may contain your Steam ID and name; trim + anonymise before committing)
 captures/
+
+# Local throwaway Postgres cluster (see the seed-dev-data skill)
+.pgdata/

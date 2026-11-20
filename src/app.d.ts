@@ -9,7 +9,11 @@ declare global {
 			session?: Session;
 		}
 
-		// interface Error {}
+		interface Error {
+			message: string;
+			/** Short id of an unexpected error, also printed in the server log. */
+			ref?: string;
+		}
 		// interface PageData {}
 		// interface PageState {}
 		// interface Platform {}

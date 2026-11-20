@@ -29,7 +29,9 @@ SvelteKit **3** (not 2), Svelte 5 runes, TypeScript 6, yarn 1, drizzle-orm + pos
 ## Commands
 
 `yarn dev`, `yarn live`, `yarn build`, `yarn run check` (never `yarn check`), `yarn lint`,
-`yarn test`, `yarn gsi:config [--install]`, `yarn db:generate`, `yarn db:migrate`.
+`yarn test`, `yarn gsi:config [--install]`, `yarn gsi:replay`, `yarn gsi:anonymise`,
+`yarn gsi:fixtures`, `yarn verify:replay`, `yarn db:generate`, `yarn db:migrate`, `yarn db:seed`,
+`yarn db:cleanup`. DB tests (`*.db.spec.ts`) need `TEST_DATABASE_URL`; otherwise they skip.
 Scripts in `scripts/` are plain Node TypeScript (type stripping): use only erasable syntax
 (no enums, no parameter properties) and import relative files with `.ts` extensions.
 
@@ -43,3 +45,31 @@ Scripts in `scripts/` are plain Node TypeScript (type stripping): use only erasa
 - Label inferred/estimated data as such in the UI and in DB column comments.
 - Stats aggregation happens in SQL (drizzle), in `src/lib/server/db/stats/`, never in routes.
 - Schema changes: generate + commit migrations; never `db:push` beyond local experiments.
+- Stat definitions and their OBSERVED / DERIVED / INFERRED / ESTIMATED / PARTIAL tags live in
+  `STATS.md`. Keep it in sync with the queries.
+- Routes are grouped: `(app)` has the site shell, `(screen)` the full-screen `/live` and
+  `/overlay`. Typed `resolve()` takes the group in the route ID (`resolve('/(app)/matches')`);
+  links that only change the query string use `here(query)` from `#lib/components/here.ts`.
+- Charts are hand-rolled SVG in `src/lib/components/charts/` with the validated `--viz-*`
+  tokens from `src/app.css`; every chart has a hover tooltip and the same numbers in a table.
+- **No absolute filesystem path literals in `src/`** (`'C:\Program Files…'`): Vercel's file
+  tracer copies whatever they point at into the build (it once copied CS2, 32 GB). Build such
+  paths from env vars. `no-path-literals.spec.ts` enforces it.
+
+## Gotchas
+
+- The live runtime is a singleton on `globalThis` and survives Vite HMR: restart the dev
+  server after changing `src/lib/server/live/` or the tracker.
+- After a node build, run `yarn run check` before `yarn lint` (it restores `.svelte-kit` types).
+- `yarn build` on Windows ends in `EPERM symlink` without Developer Mode; everything before it
+  ran. Delete `.vercel` afterwards.
+- Don't run two GSI replays into one server at once.
+
+## Skills (`.claude/skills/`)
+
+- `cs2-gsi-reference`: what GSI sends when; read before touching parsing or the tracker.
+- `gsi-replay`: replaying fixtures, turning captures into anonymised fixtures.
+- `db-change`: schema change workflow and Neon notes.
+- `add-stat`: adding a stat end to end (SQL, test, UI, STATS.md).
+- `seed-dev-data`: simulated matches for development.
+- `verify`: what "done" means; run it before claiming work is complete.

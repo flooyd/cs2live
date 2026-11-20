@@ -1,4 +1,5 @@
-import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
+import { randomUUID } from 'node:crypto';
+import type { Handle, HandleServerError, ServerInit } from '@sveltejs/kit/hooks';
 import { building } from '$app/env';
 import { getAuth } from '#lib/server/auth.ts';
 import { getRuntime } from '#lib/server/live/index.ts';
@@ -38,3 +39,12 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 };
 
 export const handle: Handle = handleBetterAuth;
+
+// Unexpected errors: log the details with a short reference, show visitors only the reference.
+// error(404, ...) and other expected errors keep their own status and message.
+export const handleError: HandleServerError = ({ kind, error, event }) => {
+	if (kind !== 'unknown') return;
+	const ref = randomUUID().slice(0, 8);
+	console.error(`[error ${ref}] ${event.request.method} ${event.url.pathname}:`, error);
+	return { message: 'Something went wrong on our side.', ref };
+};

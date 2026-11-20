@@ -11,13 +11,29 @@ const CS2_CFG = join(
 	'cfg'
 );
 
-const DEFAULT_STEAM_ROOTS = [
-	'C:\\Program Files (x86)\\Steam',
-	'C:\\Program Files\\Steam',
-	join(process.env.HOME ?? '', '.steam', 'steam'),
-	join(process.env.HOME ?? '', '.local', 'share', 'Steam'),
-	join(process.env.HOME ?? '', 'Library', 'Application Support', 'Steam')
-];
+/**
+ * Where Steam usually lives, built from environment variables at runtime.
+ *
+ * Never write these as absolute path literals ('C:\Program Files (x86)\Steam'): Vercel's file
+ * tracer (@vercel/nft) reads a literal path passed to fs as a file the server needs and copies
+ * the whole folder, CS2's game files included, into the build until the disk is full. The
+ * tracer cannot see environment variables, so this stays out of the bundle.
+ */
+function defaultSteamRoots(): string[] {
+	const roots: string[] = [];
+	for (const programFiles of [process.env['ProgramFiles(x86)'], process.env.ProgramFiles]) {
+		if (programFiles) roots.push(join(programFiles, 'Steam'));
+	}
+	const home = process.env.HOME ?? process.env.USERPROFILE;
+	if (home) {
+		roots.push(
+			join(home, '.steam', 'steam'),
+			join(home, '.local', 'share', 'Steam'),
+			join(home, 'Library', 'Application Support', 'Steam')
+		);
+	}
+	return roots;
+}
 
 /** Library folder paths listed in Steam's libraryfolders.vdf (games can live on other drives). */
 export function steamLibraries(steamRoot: string): string[] {
@@ -32,7 +48,7 @@ export function steamLibraries(steamRoot: string): string[] {
 export function findCs2CfgDir(): string | null {
 	const override = process.env.CS2_CFG_DIR;
 	if (override) return existsSync(override) ? override : null;
-	for (const root of DEFAULT_STEAM_ROOTS) {
+	for (const root of defaultSteamRoots()) {
 		if (!existsSync(root)) continue;
 		for (const lib of steamLibraries(root)) {
 			const dir = join(lib, CS2_CFG);
