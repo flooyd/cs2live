@@ -56,6 +56,14 @@ describe('economy', () => {
 		expect(classifyBuy({ equipValue: 4000, moneyFreezeStart: 5000, halfStart: false })).toBe(
 			'full'
 		);
+		// AK-47 + armour + helmet + Glock, as in a real match (it used to read as a force buy).
+		expect(classifyBuy({ equipValue: 3900, moneyFreezeStart: 6700, halfStart: false })).toBe(
+			'full'
+		);
+		// Galil + armour + helmet + Glock.
+		expect(classifyBuy({ equipValue: 3000, moneyFreezeStart: 3600, halfStart: false })).toBe(
+			'force'
+		);
 		expect(classifyBuy({ equipValue: 2700, moneyFreezeStart: 3000, halfStart: false })).toBe(
 			'force'
 		);

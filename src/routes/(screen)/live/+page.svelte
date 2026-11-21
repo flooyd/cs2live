@@ -32,6 +32,8 @@
 	const timer = $derived(v?.timer ? secondsLeft(v.timer.endsAt, now) : null);
 	const bomb = $derived(v?.bombTimer ? secondsLeft(v.bombTimer.endsAt, now) : null);
 	const roundPhase = $derived(v?.round?.phase ?? null);
+	// CS2 currently sends no round_totaldmg; damage columns only appear if it ever does.
+	const roundDamage = $derived(v?.recentRounds.some((r) => r.damage !== null) ?? false);
 	const phaseLabel = $derived.by(() => {
 		if (!v?.map) return '';
 		if (v.map.phase === 'warmup') return 'Warmup';
@@ -432,7 +434,9 @@
 								<span class="mid num">{fixed(v.matchStats.adr)}</span>
 								<span
 									class="label inferred"
-									title="Damage per completed round, from round_totaldmg while you were alive and in view"
+									title={v.matchStats.adr === null
+										? "Unknown: CS2 doesn't send damage (round_totaldmg)"
+										: 'Damage per round, from round_totaldmg while you were alive and in view'}
 								>
 									ADR
 								</span>
@@ -462,7 +466,7 @@
 										<th>Rd</th>
 										<th></th>
 										<th class="r">K</th>
-										<th class="r">Dmg</th>
+										{#if roundDamage}<th class="r">Dmg</th>{/if}
 										<th>Buy</th>
 										<th></th>
 									</tr>
@@ -482,7 +486,7 @@
 														({r.hsKills} hs)
 													</span>{/if}
 											</td>
-											<td class="r">{r.damage}</td>
+											{#if roundDamage}<td class="r">{r.damage ?? '—'}</td>{/if}
 											<td class="muted">{buyLabel(r.buyType as BuyType | null)}</td>
 											<td class="dim">{r.survived === false ? '✝' : ''}</td>
 										</tr>
@@ -520,9 +524,11 @@
 							<div>
 								<span class="big num">{v.roundStats.hsKills}</span><span class="label">HS</span>
 							</div>
-							<div>
-								<span class="big num">{v.roundStats.damage}</span><span class="label">Dmg</span>
-							</div>
+							{#if v.roundStats.damage !== null}
+								<div>
+									<span class="big num">{v.roundStats.damage}</span><span class="label">Dmg</span>
+								</div>
+							{/if}
 						</div>
 					{/if}
 					{#if v.economy}

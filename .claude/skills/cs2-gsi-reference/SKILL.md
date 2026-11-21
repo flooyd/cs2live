@@ -55,6 +55,8 @@ description: Field reference for CS2's Game State Integration payloads - which s
 
 **`round_totaldmg` is not sent by CS2** **(seen)**: it was in none of the 314 payloads about the
 player in the real match, nor in the Deathmatch session. Damage and ADR cannot be measured from GSI.
+CS2Live stores damage as `null` (unknown) and shows "—"; ADR only counts rounds with damage. The
+simulator still sends `round_totaldmg` on purpose, so that code path stays tested.
 
 ## Phases
 

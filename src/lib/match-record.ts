@@ -26,8 +26,11 @@ export const roundRecordSchema = z.object({
 	kills: z.number().int().min(0),
 	/** Inferred from round_killhs. */
 	hsKills: z.number().int().min(0),
-	/** round_totaldmg as last seen while you were alive and in view. */
-	damage: z.number().int().min(0),
+	/**
+	 * round_totaldmg as last seen while you were alive and in view. Null when CS2 sent none: as
+	 * of Nov 2026 it never does. Older CS2Live versions sent 0 instead.
+	 */
+	damage: z.number().int().min(0).nullable(),
 	/** Inferred from the match_stats.assists delta. */
 	assists: z.number().int().min(0),
 	/** Inferred from health, death count and being seen spectating. */
@@ -102,7 +105,8 @@ export const matchRecordSchema = z.object({
 	mvps: z.number().int().min(0),
 	score: z.number().int(),
 	hsKills: z.number().int().min(0),
-	damage: z.number().int().min(0),
+	/** Sum over rounds with damage; null when no round had any (see the round field). */
+	damage: z.number().int().min(0).nullable(),
 	roundsPlayed: z.number().int().min(0),
 	adr: z.number().nullable(),
 	hsPct: z.number().nullable(),
@@ -122,10 +126,22 @@ export type KillEventRecord = z.infer<typeof killEventSchema>;
 export type SightingRecord = z.infer<typeof sightingSchema>;
 export type MatchRecord = z.infer<typeof matchRecordSchema>;
 
-/** ADR, HS% and K/D from totals. Null when undefined (no rounds / no kills). */
+/** Damage summed over the rounds that have it, and how many those are. */
+export function damageTotals(rounds: { damage: number | null }[]) {
+	const known = rounds.filter((r): r is { damage: number } => r.damage !== null);
+	return {
+		damage: known.length ? known.reduce((n, r) => n + r.damage, 0) : null,
+		damageRounds: known.length
+	};
+}
+
+/**
+ * ADR, HS% and K/D from totals. Null when undefined (no damage data / no kills). ADR divides
+ * by the rounds that have damage, not all rounds played.
+ */
 export function derivedRates(t: {
-	damage: number;
-	roundsPlayed: number;
+	damage: number | null;
+	damageRounds: number;
 	hsKills: number;
 	roundKills: number;
 	kills: number;
@@ -133,7 +149,7 @@ export function derivedRates(t: {
 }) {
 	const round2 = (n: number) => Math.round(n * 100) / 100;
 	return {
-		adr: t.roundsPlayed > 0 ? round2(t.damage / t.roundsPlayed) : null,
+		adr: t.damage !== null && t.damageRounds > 0 ? round2(t.damage / t.damageRounds) : null,
 		hsPct: t.roundKills > 0 ? round2((100 * t.hsKills) / t.roundKills) : null,
 		kd: round2(t.kills / Math.max(1, t.deaths))
 	};

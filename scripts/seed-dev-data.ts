@@ -20,7 +20,7 @@ import {
 	type SimPlayer
 } from '../src/lib/server/gsi/sim/simulate.ts';
 import { fakeSteamId, FAKE_STEAMID_FIRST } from '../src/lib/cs2/steamid.ts';
-import type { MatchRecord } from '../src/lib/match-record.ts';
+import { damageTotals, type MatchRecord } from '../src/lib/match-record.ts';
 
 const args = process.argv.slice(2);
 const has = (name: string) => args.includes(name);
@@ -114,9 +114,9 @@ function teammateRecording(mine: MatchRecord, mate: SimPlayer, seed: number): Ma
 		const o = other.rounds[i];
 		return o ? { ...r, ...pick(o), number: r.number } : { ...r, kills: 0, hsKills: 0, damage: 0 };
 	});
-	const sum = (k: 'kills' | 'hsKills' | 'damage') => rounds.reduce((n, r) => n + r[k], 0);
+	const sum = (k: 'kills' | 'hsKills') => rounds.reduce((n, r) => n + r[k], 0);
 	const kills = sum('kills');
-	const damage = sum('damage');
+	const { damage, damageRounds } = damageTotals(rounds);
 	return {
 		...mine,
 		id: randomUUID(),
@@ -130,7 +130,7 @@ function teammateRecording(mine: MatchRecord, mate: SimPlayer, seed: number): Ma
 		assists: other.assists,
 		mvps: other.mvps,
 		score: other.score,
-		adr: mine.roundsPlayed ? Math.round((damage / mine.roundsPlayed) * 100) / 100 : null,
+		adr: damage !== null && damageRounds ? Math.round((damage / damageRounds) * 100) / 100 : null,
 		hsPct: kills ? Math.round((10000 * sum('hsKills')) / kills) / 100 : null,
 		kd: Math.round((kills / Math.max(1, other.deaths)) * 100) / 100,
 		rounds,

@@ -19,18 +19,18 @@ have no round data, so they appear in match lists but not in stats.
 
 ## Per match
 
-| Stat                                | Tag      | Definition                                                                                                                                                                                         |
-| ----------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Kills, assists, deaths, MVPs, score | OBSERVED | `player.match_stats` at the last payload of the match.                                                                                                                                             |
-| Result                              | DERIVED  | `win` / `loss` / `tie` from the final team scores and the recorder's side. `incomplete` matches (left, crashed, timed out) have no result.                                                         |
-| Score                               | OBSERVED | `map.team_ct.score` / `team_t.score`, shown as the recorder's team first.                                                                                                                          |
-| Rounds played                       | DERIVED  | Rounds the recorder saw finish. Lower than the score total if they joined mid-match.                                                                                                               |
-| Damage                              | INFERRED | Sum over rounds of the highest `player.state.round_totaldmg` seen in that round. **CS2 does not currently send `round_totaldmg`** (checked against a real match), so this is 0 for real games.     |
-| ADR                                 | DERIVED  | Damage ÷ rounds played.                                                                                                                                                                            |
-| HS%                                 | INFERRED | Headshot kills ÷ kills counted round by round, × 100. Both come from `round_killhs` / `round_kills`, so kills not seen round by round are left out of the base.                                    |
-| K/D                                 | DERIVED  | Kills ÷ deaths (kills when there are no deaths).                                                                                                                                                   |
-| Joined mid-match                    | OBSERVED | The first payload was already past round 1; the first round number is stored.                                                                                                                      |
-| Linked recordings                   | INFERRED | Two players' recordings are the same game when map and mode match, they started within ten minutes of each other, and the final score is the same from either side (or one of them is incomplete). |
+| Stat                                | Tag      | Definition                                                                                                                                                                                                                                                                               |
+| ----------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kills, assists, deaths, MVPs, score | OBSERVED | `player.match_stats` at the last payload of the match.                                                                                                                                                                                                                                   |
+| Result                              | DERIVED  | `win` / `loss` / `tie` from the final team scores and the recorder's side. `incomplete` matches (left, crashed, timed out) have no result.                                                                                                                                               |
+| Score                               | OBSERVED | `map.team_ct.score` / `team_t.score`, shown as the recorder's team first.                                                                                                                                                                                                                |
+| Rounds played                       | DERIVED  | Rounds the recorder saw finish. Lower than the score total if they joined mid-match.                                                                                                                                                                                                     |
+| Damage                              | INFERRED | Sum over rounds of the highest `player.state.round_totaldmg` seen in that round. **Unknown (—) for real games: CS2 currently sends no `round_totaldmg`** (checked against a real match). A match with no damage at all is stored as unknown, also when an older CS2Live uploads it as 0. |
+| ADR                                 | DERIVED  | Damage ÷ rounds with known damage. Unknown when damage is.                                                                                                                                                                                                                               |
+| HS%                                 | INFERRED | Headshot kills ÷ kills counted round by round, × 100. Both come from `round_killhs` / `round_kills`, so kills not seen round by round are left out of the base.                                                                                                                          |
+| K/D                                 | DERIVED  | Kills ÷ deaths (kills when there are no deaths).                                                                                                                                                                                                                                         |
+| Joined mid-match                    | OBSERVED | The first payload was already past round 1; the first round number is stored.                                                                                                                                                                                                            |
+| Linked recordings                   | INFERRED | Two players' recordings are the same game when map and mode match, they started within ten minutes of each other, and the final score is the same from either side (or one of them is incomplete).                                                                                       |
 
 ## Per round
 
@@ -39,7 +39,7 @@ have no round data, so they appear in match lists but not in stats.
 | Side            | OBSERVED  | `player.team` during the round.                                                                                                                                                                          |
 | Won / lost, how | OBSERVED  | `map.round_wins[n]`, e.g. `t_win_bomb`. The win reason gives the winning side.                                                                                                                           |
 | Kills, HS kills | OBSERVED  | Kills: the larger of the highest `round_kills` seen and the rise in `match_stats.kills` over the round. HS kills: the highest `round_killhs`, capped at kills. Joining mid-round can miss earlier kills. |
-| Damage          | INFERRED  | The highest `round_totaldmg` seen in the round.                                                                                                                                                          |
+| Damage          | INFERRED  | The highest `round_totaldmg` seen in the round. Unknown when CS2 sent none, which is currently always.                                                                                                   |
 | Survived        | INFERRED  | Your `match_stats.deaths` did not go up, health never hit 0, and you were never seen spectating. Unknown for rounds joined part-way.                                                                     |
 | Money           | OBSERVED  | `player.state.money` when freeze time started (before buying).                                                                                                                                           |
 | Equipment value | OBSERVED  | `player.state.equip_value` after buying: the last reading from freeze time or the first 15 s of the round, stopping at your first kill (its reward lands in your money) or your death.                   |
@@ -56,7 +56,7 @@ live in `src/lib/cs2/economy.ts` (`BUY_THRESHOLDS`).
 | Buy      | Rule                                                                                                                                 |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | Pistol   | First round of a regulation half, or a round right after a side switch that you started with $1000 or less (covers mid-match joins). |
-| Full buy | Equipment value ≥ $4000.                                                                                                             |
+| Full buy | Equipment value ≥ $3700.                                                                                                             |
 | Force    | Equipment value ≥ $2000.                                                                                                             |
 | Save     | Equipment value < $2000 although you started freeze time with ≥ $3000: you chose not to buy.                                         |
 | Eco      | Equipment value < $2000 and you started freeze time with < $3000.                                                                    |
@@ -79,11 +79,11 @@ matches, after the map, mode and period filters.
 | Matches, W/L/T    | DERIVED   | Count of recorded matches by result; unfinished ones are counted separately.                                   |
 | Win rate          | DERIVED   | Wins ÷ (wins + losses + ties). Incomplete matches are left out.                                                |
 | K/D               | DERIVED   | Total kills ÷ total deaths.                                                                                    |
-| ADR               | INFERRED  | Total damage ÷ total rounds played (not the average of per-match ADR, so long matches weigh more).             |
+| ADR               | INFERRED  | Total damage ÷ rounds with known damage (not the average of per-match ADR). Unknown while CS2 sends no damage. |
 | HS%               | INFERRED  | Total headshot kills ÷ total kills counted round by round.                                                     |
 | KPR               | DERIVED   | Kills ÷ rounds played.                                                                                         |
 | Played            | OBSERVED  | Sum of match durations (first to last payload).                                                                |
-| Recent form       | INFERRED  | ADR of each of the last 20 matches, oldest first.                                                              |
+| Recent form       | DERIVED   | K/D of each of the last 20 matches, oldest first.                                                              |
 | CT vs T           | INFERRED  | Per side: rounds won ÷ rounds, ADR, kills per round, and survival (survived ÷ rounds where survival is known). |
 | Multi-kill rounds | OBSERVED  | Rounds with exactly 2, 3 or 4 kills, and aces (5).                                                             |
 | Maps, modes       | DERIVED   | The match stats above, grouped by map or mode.                                                                 |

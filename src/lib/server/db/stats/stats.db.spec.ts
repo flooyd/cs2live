@@ -7,7 +7,9 @@ import { playerStats } from './player-stats.ts';
 import { filterOptions, playerProfile, searchPlayers } from './players.ts';
 import { loadFixture, runFrames } from '../../gsi/testing.ts';
 import { SIM_ME, SIM_TEAMMATES } from '../../gsi/sim/simulate.ts';
+import { sql } from 'drizzle-orm';
 import { parseMatchFilters } from '#lib/match-filters.ts';
+import { fakeSteamId } from '#lib/cs2/steamid.ts';
 import type { MatchRecord } from '#lib/match-record.ts';
 
 const recordOf = (fixture: string): MatchRecord => ({
@@ -146,5 +148,58 @@ describe.skipIf(!TEST_DATABASE_URL)('stats queries', () => {
 		expect(tally.map((w) => w.kills)).toEqual(tally.map((w) => w.kills).sort((a, b) => b - a));
 		expect(tally.every((w) => w.hs <= w.kills)).toBe(true);
 		expect(await matchDetail(t.db, randomUUID())).toBeNull();
+	});
+});
+
+describe.skipIf(!TEST_DATABASE_URL)('unknown damage', () => {
+	let t: TestDb;
+	beforeAll(async () => {
+		t = await openTestDb();
+		await t.reset();
+	});
+	afterAll(() => t?.close());
+
+	it('leaves matches without damage out of ADR instead of counting them as 0', async () => {
+		const me = fakeSteamId(100);
+		// A real match: CS2 sent no round_totaldmg, so damage is null.
+		const real: MatchRecord = {
+			...runFrames(loadFixture('real/wingman-inferno'), { steamId: me }).records[0],
+			id: randomUUID()
+		};
+		// The same player in a match with damage (the simulator still sends round_totaldmg).
+		const sim = runFrames(loadFixture('synthetic/full-match'), { steamId: SIM_ME.steamId });
+		const withDamage: MatchRecord = {
+			...sim.records[0],
+			id: randomUUID(),
+			recorderSteamId: me,
+			sightings: []
+		};
+		// What a CS2Live version from before Nov 2026 uploads for a real match: 0, not null.
+		const old: MatchRecord = {
+			...real,
+			id: randomUUID(),
+			damage: 0,
+			adr: 0,
+			rounds: real.rounds.map((r) => ({ ...r, damage: 0 }))
+		};
+		for (const r of [real, withDamage, old]) await persistMatch(t.db, r);
+
+		const s = await playerStats(t.db, me, noFilters);
+		expect(s.totals.matches).toBe(3);
+		expect(s.totals.damage).toBe(withDamage.damage);
+		expect(s.totals.damageRounds).toBe(withDamage.roundsPlayed);
+		expect(s.rates.adr).toBeCloseTo(withDamage.damage! / withDamage.roundsPlayed, 5);
+
+		const stored = await t.db.execute<{ id: string; damage: number | null; adr: number | null }>(
+			sql`select id, damage, adr from matches where id in (${real.id}, ${old.id})`
+		);
+		expect(stored.map((m) => [m.damage, m.adr])).toEqual([
+			[null, null],
+			[null, null]
+		]);
+		const oldRounds = await t.db.execute<{ n: number }>(
+			sql`select count(*)::int as n from rounds where match_id = ${old.id} and damage is not null`
+		);
+		expect(oldRounds[0].n).toBe(0);
 	});
 });

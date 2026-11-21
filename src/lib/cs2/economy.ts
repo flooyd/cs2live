@@ -12,7 +12,8 @@ export const BUY_TYPES: BuyType[] = ['pistol', 'eco', 'force', 'full', 'save'];
  *
  * - `pistol`: the first round of a regulation half, or any round where you started freeze time
  *   with $1000 or less right after a side switch (covers mid-match joins).
- * - `full`:  equipment value >= $4000 (a rifle plus armour; also kept weapons from a saved round).
+ * - `full`:  equipment value >= $3700: a rifle with armour and helmet (AK-47 + armour + helmet +
+ *            Glock is $3900); also kept weapons from a saved round. Galil and FAMAS buys stay below.
  * - `force`: equipment value >= $2000.
  * - `save`:  equipment value < $2000 although you could have afforded more (start money >= $3000):
  *   you deliberately did not buy.
@@ -20,7 +21,7 @@ export const BUY_TYPES: BuyType[] = ['pistol', 'eco', 'force', 'full', 'save'];
  */
 export const BUY_THRESHOLDS = {
 	pistolMaxMoney: 1000,
-	full: 4000,
+	full: 3700,
 	force: 2000,
 	saveMinMoney: 3000
 } as const;

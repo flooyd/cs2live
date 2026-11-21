@@ -11,6 +11,7 @@
 import type { GsiPayload } from './schema.ts';
 import {
 	MATCH_RECORD_VERSION,
+	damageTotals,
 	derivedRates,
 	type MatchRecord,
 	type RoundRecord,
@@ -309,7 +310,7 @@ export function buildRecord(m: MatchDraft, appVersion: string): MatchRecord {
 	const self = m.selfStats ?? { kills: 0, assists: 0, deaths: 0, mvps: 0, score: 0 };
 	const roundKills = rounds.reduce((n, r) => n + r.kills, 0);
 	const hsKills = rounds.reduce((n, r) => n + r.hsKills, 0);
-	const damage = rounds.reduce((n, r) => n + r.damage, 0);
+	const { damage, damageRounds } = damageTotals(rounds);
 	const endedAt = m.endedAt ?? m.lastDataAt;
 	const result: MatchRecord['result'] =
 		m.status !== 'complete'
@@ -347,7 +348,7 @@ export function buildRecord(m: MatchDraft, appVersion: string): MatchRecord {
 		roundsPlayed: rounds.length,
 		...derivedRates({
 			damage,
-			roundsPlayed: rounds.length,
+			damageRounds,
 			hsKills,
 			roundKills,
 			kills: self.kills,

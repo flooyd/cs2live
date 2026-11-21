@@ -81,7 +81,7 @@
 			{#if v.matchStats}
 				<div class="row num stats">
 					<span>{v.matchStats.kills} / {v.matchStats.assists} / {v.matchStats.deaths}</span>
-					<span>ADR {fixed(v.matchStats.adr, 0)}</span>
+					{#if v.matchStats.adr !== null}<span>ADR {fixed(v.matchStats.adr, 0)}</span>{/if}
 					<span>HS {v.matchStats.hsPct === null ? '—' : `${Math.round(v.matchStats.hsPct)}%`}</span>
 					{#if v.roundStats && v.roundStats.kills > 0}
 						<span class="rk">{v.roundStats.kills}K this round</span>

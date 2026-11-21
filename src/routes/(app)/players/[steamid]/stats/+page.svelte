@@ -20,19 +20,20 @@
 		seconds >= 3600 ? `${(seconds / 3600).toFixed(1)} h` : `${Math.round(seconds / 60)} min`;
 	const share = (n: number | null) => (n === null ? '—' : pct(n * 100));
 
-	// Recent form: ADR per match. Wins carry the accent, everything else stays gray (emphasis),
-	// and a W / L / T letter under each column says the result without relying on color.
+	// Recent form: K/D per match (it used to be ADR, but CS2 sends no damage). Wins carry the
+	// accent, everything else stays gray (emphasis), and a W / L / T letter under each column
+	// says the result without relying on color.
 	const form = $derived.by((): Column[] =>
 		(s?.form ?? []).map((m) => ({
 			key: m.id,
 			label: '',
-			value: m.adr ?? 0,
+			value: m.kd ?? 0,
 			color: m.result === 'win' ? 'var(--viz-single)' : 'var(--viz-axis)',
 			mark: m.result === 'win' ? 'W' : m.result === 'loss' ? 'L' : m.result === 'tie' ? 'T' : '–',
 			tip: [
-				`ADR ${fixed(m.adr)}`,
+				`K/D ${fixed(m.kd, 2)} (${m.kills} / ${m.deaths})`,
 				`${mapLabel(m.map)} · ${date(m.startedAt)}`,
-				`${resultLabel(m.result)} ${m.scoreMine}–${m.scoreTheirs} · ${m.kills}/${m.deaths} K/D`
+				`${resultLabel(m.result)} ${m.scoreMine}–${m.scoreTheirs}${m.adr === null ? '' : ` · ADR ${fixed(m.adr)}`}`
 			]
 		}))
 	);
@@ -86,11 +87,15 @@
 				<span class="v">{fixed(s.rates.adr)}</span>
 				<span
 					class="label inferred"
-					title="Damage per round from round_totaldmg; misses damage after death"
+					title={s.rates.adr === null
+						? "Unknown: CS2 doesn't send damage (round_totaldmg)"
+						: 'Damage per round from round_totaldmg; misses damage after death'}
 				>
 					ADR
 				</span>
-				<span class="sub num">{t.rounds} rounds</span>
+				<span class="sub num">
+					{t.damageRounds ? `${t.damageRounds} rounds` : 'not sent by CS2'}
+				</span>
 			</div>
 			<div>
 				<span class="v">{pct(s.rates.hsPct)}</span>
@@ -109,14 +114,14 @@
 				<div class="head">
 					<h2>Recent form</h2>
 					<span class="muted small">
-						ADR in the last {form.length} matches, oldest first · wins highlighted
+						K/D in the last {form.length} matches, oldest first · wins highlighted
 					</span>
 				</div>
 				<ColumnChart
 					columns={form}
 					height={170}
-					format={(n: number) => String(Math.round(n))}
-					label="ADR per match, last {form.length} matches"
+					format={(n: number) => fixed(n, 1)}
+					label="K/D per match, last {form.length} matches"
 				/>
 			</section>
 		{/if}

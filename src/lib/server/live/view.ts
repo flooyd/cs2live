@@ -15,7 +15,7 @@ import { BOMB_TIMER_S, ROUND_OVER_S, mapLabel, modeInfo } from '#lib/cs2/modes.t
 import { economyRules, estimateNextRoundMoney } from '#lib/cs2/economy.ts';
 import { asSide, parseWinReason, type Side } from '#lib/cs2/rounds.ts';
 import { isPrimaryType, weaponLabel } from '#lib/cs2/weapons.ts';
-import { derivedRates } from '#lib/match-record.ts';
+import { damageTotals, derivedRates } from '#lib/match-record.ts';
 import {
 	activeWeapon,
 	currentRoundNumber,
@@ -137,7 +137,7 @@ export function buildLiveView(input: ViewInput): LiveView {
 			? {
 					kills: selfPayload.player.state.round_kills ?? 0,
 					hsKills: selfPayload.player.state.round_killhs ?? 0,
-					damage: selfPayload.player.state.round_totaldmg ?? 0
+					damage: selfPayload.player.state.round_totaldmg ?? null
 				}
 			: null,
 		economy:
@@ -231,14 +231,14 @@ function spectatingView(p: GsiPayload): LiveView['spectating'] {
 function matchStats(selfPayload: GsiPayload, match: MatchDraft | null): LiveView['matchStats'] {
 	const ms = selfPayload.player?.match_stats ?? {};
 	const rounds = match?.rounds.finished ?? [];
-	const damage = rounds.reduce((n, r) => n + r.damage, 0);
+	const { damage, damageRounds } = damageTotals(rounds);
 	const hsKills = rounds.reduce((n, r) => n + r.hsKills, 0);
 	const roundKills = rounds.reduce((n, r) => n + r.kills, 0);
 	const kills = ms.kills ?? 0;
 	const deaths = ms.deaths ?? 0;
 	const rates = derivedRates({
 		damage,
-		roundsPlayed: rounds.length,
+		damageRounds,
 		hsKills,
 		roundKills,
 		kills,

@@ -11,11 +11,26 @@ export class RecorderMismatchError extends Error {}
 /** How close two recordings' start times must be to count as the same game. */
 const SAME_GAME_WINDOW_MS = 10 * 60_000;
 
+/**
+ * A match with no damage at all is stored as unknown. CS2 sends no round_totaldmg, and CS2Live
+ * versions from before Nov 2026 recorded that as 0 damage (and 0 ADR) instead of null.
+ */
+export function withUnknownDamage(record: MatchRecord): MatchRecord {
+	if (record.damage !== 0) return record;
+	return {
+		...record,
+		damage: null,
+		adr: null,
+		rounds: record.rounds.map((r) => ({ ...r, damage: null }))
+	};
+}
+
 export async function persistMatch(
 	db: Db,
-	record: MatchRecord,
+	input: MatchRecord,
 	source: 'direct' | 'upload' = 'direct'
 ) {
+	const record = withUnknownDamage(input);
 	const startedAt = new Date(record.startedAt);
 	const endedAt = new Date(record.endedAt);
 

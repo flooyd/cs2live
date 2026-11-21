@@ -32,7 +32,10 @@ export interface Totals {
 	deaths: number;
 	assists: number;
 	mvps: number;
+	/** Over the rounds that have damage; CS2 currently sends none, so usually 0. */
 	damage: number;
+	/** Rounds with known damage: the base for ADR. */
+	damageRounds: number;
 	hsKills: number;
 	/** Kills counted round by round (the base for HS%). */
 	roundKills: number;
@@ -51,7 +54,7 @@ export interface Rates {
 export function rates(t: Totals): Rates {
 	return {
 		winRate: ratio(t.wins, t.wins + t.losses + t.ties),
-		adr: ratio(t.damage, t.rounds),
+		adr: ratio(t.damage, t.damageRounds),
 		kd: t.deaths > 0 ? t.kills / t.deaths : t.kills > 0 ? t.kills : null,
 		hsPct: t.roundKills > 0 ? (100 * t.hsKills) / t.roundKills : null,
 		kpr: ratio(t.kills, t.rounds)
@@ -72,6 +75,7 @@ const TOTALS = sql`
 	coalesce(sum(m.assists), 0)::int as assists,
 	coalesce(sum(m.mvps), 0)::int as mvps,
 	coalesce(sum(m.damage), 0)::int as damage,
+	coalesce(sum((select count(r.damage) from rounds r where r.match_id = m.id)), 0)::int as damage_rounds,
 	coalesce(sum(m.hs_kills), 0)::int as hs_kills,
 	coalesce(sum((select sum(r.kills) from rounds r where r.match_id = m.id)), 0)::int as round_kills,
 	coalesce(sum(m.duration_s), 0)::int as seconds
@@ -91,6 +95,7 @@ type TotalsRow = {
 	assists: number;
 	mvps: number;
 	damage: number;
+	damage_rounds: number;
 	hs_kills: number;
 	round_kills: number;
 	seconds: number;
@@ -111,6 +116,7 @@ function totals(r: TotalsRow): Totals {
 		assists: r.assists,
 		mvps: r.mvps,
 		damage: r.damage,
+		damageRounds: r.damage_rounds,
 		hsKills: r.hs_kills,
 		roundKills: r.round_kills,
 		seconds: r.seconds
@@ -134,6 +140,7 @@ export async function playerStats(db: Db, steamId: string, f: Filters) {
 			won: number;
 			kills: number;
 			damage: number;
+			damage_rounds: number;
 			survived: number;
 			known: number;
 		}>(sql`
@@ -141,6 +148,7 @@ export async function playerStats(db: Db, steamId: string, f: Filters) {
 				count(*) filter (where r.i_won)::int as won,
 				coalesce(sum(r.kills), 0)::int as kills,
 				coalesce(sum(r.damage), 0)::int as damage,
+				count(r.damage)::int as damage_rounds,
 				count(*) filter (where r.survived)::int as survived,
 				count(r.survived)::int as known
 			from rounds r join matches m on m.id = r.match_id
@@ -153,12 +161,14 @@ export async function playerStats(db: Db, steamId: string, f: Filters) {
 			won: number;
 			kills: number;
 			damage: number;
+			damage_rounds: number;
 			equip: number | null;
 		}>(sql`
 			select r.buy_type as buy, count(*)::int as rounds,
 				count(*) filter (where r.i_won)::int as won,
 				coalesce(sum(r.kills), 0)::int as kills,
 				coalesce(sum(r.damage), 0)::int as damage,
+				count(r.damage)::int as damage_rounds,
 				avg(r.equip_value)::float8 as equip
 			from rounds r join matches m on m.id = r.match_id
 			where ${where} and r.buy_type is not null
@@ -209,7 +219,7 @@ export async function playerStats(db: Db, steamId: string, f: Filters) {
 			rounds: s.rounds,
 			won: s.won,
 			winRate: ratio(s.won, s.rounds),
-			adr: ratio(s.damage, s.rounds),
+			adr: ratio(s.damage, s.damage_rounds),
 			kpr: ratio(s.kills, s.rounds),
 			survival: ratio(s.survived, s.known)
 		})),
@@ -219,7 +229,7 @@ export async function playerStats(db: Db, steamId: string, f: Filters) {
 				rounds: b.rounds,
 				winRate: ratio(b.won, b.rounds),
 				kpr: ratio(b.kills, b.rounds),
-				adr: ratio(b.damage, b.rounds),
+				adr: ratio(b.damage, b.damage_rounds),
 				equip: b.equip
 			}))
 			.sort((a, b) => BUY_ORDER.indexOf(a.buy) - BUY_ORDER.indexOf(b.buy)),

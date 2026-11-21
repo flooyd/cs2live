@@ -67,9 +67,13 @@
 	const plotH = $derived(Math.max(10, boxH - M.top - M.bottom));
 	const n = $derived(Math.max(2, labels.length));
 	const step = $derived(plotW / (n - 1));
-	const ticks = $derived(
-		niceTicks(Math.max(1, ...values.filter((v): v is number => v !== null)), 2)
-	);
+	// The tightest of 2-4 round steps: with 2 alone, a $10.2K peak got a $20K axis.
+	const ticks = $derived.by(() => {
+		const max = Math.max(1, ...values.filter((v): v is number => v !== null));
+		return [2, 3, 4]
+			.map((count) => niceTicks(max, count))
+			.reduce((best, t) => (t.at(-1)! < best.at(-1)! ? t : best));
+	});
 	const yMax = $derived(ticks.at(-1) ?? 1);
 	const x = (i: number) => M.left + i * step;
 	const y = (v: number) => M.top + plotH - (v / yMax) * plotH;

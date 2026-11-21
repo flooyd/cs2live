@@ -65,7 +65,8 @@ export const matches = pgTable(
 		mvps: integer('mvps').notNull(),
 		score: integer('score').notNull(),
 		hsKills: integer('hs_kills').notNull(),
-		damage: integer('damage').notNull(),
+		/** Null: unknown (CS2 sends no round_totaldmg). */
+		damage: integer('damage'),
 		roundsPlayed: integer('rounds_played').notNull(),
 		adr: real('adr'),
 		hsPct: real('hs_pct'),
@@ -103,7 +104,8 @@ export const rounds = pgTable(
 		bomb: text('bomb'),
 		kills: integer('kills').notNull(),
 		hsKills: integer('hs_kills').notNull(),
-		damage: integer('damage').notNull(),
+		/** Null: unknown (CS2 sends no round_totaldmg). */
+		damage: integer('damage'),
 		assists: integer('assists').notNull(),
 		survived: boolean('survived'),
 		healthEnd: integer('health_end'),

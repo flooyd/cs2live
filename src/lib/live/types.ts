@@ -106,7 +106,8 @@ export interface RecentRound {
 	winKind: WinKind;
 	kills: number;
 	hsKills: number;
-	damage: number;
+	/** Null when CS2 sent no damage (it currently never does). */
+	damage: number | null;
 	survived: boolean | null;
 	buyType: string | null;
 	equipValue: number | null;
@@ -190,7 +191,7 @@ export interface LiveView {
 		kd: number | null;
 		roundsCompleted: number;
 	} | null;
-	roundStats: { kills: number; hsKills: number; damage: number } | null;
+	roundStats: { kills: number; hsKills: number; damage: number | null } | null;
 	economy: {
 		money: number;
 		consecutiveLosses: number;

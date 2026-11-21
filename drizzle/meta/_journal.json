@@ -15,6 +15,20 @@
       "when": 1795155950076,
       "tag": "0001_column_comments",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795228486135,
+      "tag": "0002_damage_nullable",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795228494617,
+      "tag": "0003_damage_unknown",
+      "breakpoints": true
     }
   ]
 }

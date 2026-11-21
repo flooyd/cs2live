@@ -18,16 +18,19 @@
 		side === 'CT' ? 'var(--viz-ct)' : side === 'T' ? 'var(--viz-t)' : 'var(--viz-single)';
 	const buy = (b: string | null) => (b ? buyLabel(b as BuyType) : '—');
 
+	// CS2 currently sends no round_totaldmg, so damage is usually unknown (null) for every round.
+	const hasDamage = $derived(!data.remote && data.rounds.some((r) => r.damage !== null));
+
 	const damageColumns = $derived.by((): Column[] => {
-		if (data.remote) return [];
+		if (data.remote || !hasDamage) return [];
 		return data.rounds.map((r) => ({
 			key: r.number,
 			label: String(r.number),
-			value: r.damage,
+			value: r.damage ?? 0,
 			color: sideVar(r.mySide),
 			mark: r.iWon === null ? '' : r.iWon ? 'W' : 'L',
 			tip: [
-				`${r.damage} damage`,
+				r.damage === null ? 'Damage unknown' : `${r.damage} damage`,
 				`Round ${r.number}${r.mySide ? ` · ${r.mySide}` : ''}${r.iWon === null ? '' : r.iWon ? ' · won' : ' · lost'}`,
 				`${r.kills} kill${r.kills === 1 ? '' : 's'}${r.hsKills ? ` (${r.hsKills} HS)` : ''}${r.survived === false ? ' · died' : ''}`,
 				`Buy: ${buy(r.buyType)} (est.)`
@@ -104,7 +107,9 @@
 			<span class="v">{fixed(m.adr)}</span>
 			<span
 				class="label inferred"
-				title="Damage from round_totaldmg per round seen; misses damage after death"
+				title={m.adr === null
+					? "Unknown: CS2 doesn't send damage (round_totaldmg)"
+					: 'Damage from round_totaldmg per round seen; misses damage after death'}
 			>
 				ADR
 			</span>
@@ -127,28 +132,34 @@
 	{/if}
 
 	{#if data.rounds.length}
-		<section class="panel block">
-			<div class="head">
-				<h2>Damage per round</h2>
-				<span class="legend">
-					<span><i style:background="var(--viz-ct)"></i>CT</span>
-					<span><i style:background="var(--viz-t)"></i>T</span>
-					<span class="muted">W / L under each round</span>
-				</span>
-			</div>
-			<ColumnChart columns={damageColumns} label="Damage dealt by the recorder in each round" />
-			{#if multiKills.length}
-				<p class="highlights">
-					{#each multiKills as r (r.number)}
-						<span class="chip warn">
-							Round {r.number}: {r.kills === 5 ? 'ace' : `${r.kills} kills`}{r.hsKills
-								? `, ${r.hsKills} HS`
-								: ''}
+		{#if hasDamage || multiKills.length}
+			<section class="panel block">
+				{#if hasDamage}
+					<div class="head">
+						<h2>Damage per round</h2>
+						<span class="legend">
+							<span><i style:background="var(--viz-ct)"></i>CT</span>
+							<span><i style:background="var(--viz-t)"></i>T</span>
+							<span class="muted">W / L under each round</span>
 						</span>
-					{/each}
-				</p>
-			{/if}
-		</section>
+					</div>
+					<ColumnChart columns={damageColumns} label="Damage dealt by the recorder in each round" />
+				{:else}
+					<h2>Highlights</h2>
+				{/if}
+				{#if multiKills.length}
+					<p class="highlights">
+						{#each multiKills as r (r.number)}
+							<span class="chip warn">
+								Round {r.number}: {r.kills === 5 ? 'ace' : `${r.kills} kills`}{r.hsKills
+									? `, ${r.hsKills} HS`
+									: ''}
+							</span>
+						{/each}
+					</p>
+				{/if}
+			</section>
+		{/if}
 
 		{#if hasEconomy}
 			<section class="panel block">
@@ -185,7 +196,7 @@
 							<th>Result</th>
 							<th class="r">K</th>
 							<th class="r">HS</th>
-							<th class="r">Dmg</th>
+							{#if hasDamage}<th class="r">Dmg</th>{/if}
 							<th>Survived</th>
 							<th class="r">Money</th>
 							<th class="r">Equip</th>
@@ -208,7 +219,7 @@
 								</td>
 								<td class="r num">{r.kills}</td>
 								<td class="r num">{r.hsKills}</td>
-								<td class="r num">{r.damage}</td>
+								{#if hasDamage}<td class="r num">{r.damage ?? '—'}</td>{/if}
 								<td>{r.survived === null ? '?' : r.survived ? 'Yes' : 'No'}</td>
 								<td class="r num">{money(r.moneyFreezeStart)}</td>
 								<td class="r num">{money(r.equipValue)}</td>
@@ -314,7 +325,9 @@
 								{resultLabel(l.result)}
 								{l.scoreMine}–{l.scoreTheirs}
 							</span>
-							<span class="muted num">{l.kills}/{l.assists}/{l.deaths} · ADR {fixed(l.adr)}</span>
+							<span class="muted num">
+								{l.kills}/{l.assists}/{l.deaths}{l.adr === null ? '' : ` · ADR ${fixed(l.adr)}`}
+							</span>
 						</li>
 					{/each}
 				</ul>

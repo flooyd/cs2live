@@ -76,8 +76,10 @@ describe('full match', () => {
 		expect(r.kills).toBe(roundKills);
 		expect(r.killEvents).toHaveLength(roundKills);
 		expect(r.killEvents.filter((k) => k.headshot)).toHaveLength(r.hsKills);
-		expect(r.damage).toBe(r.rounds.reduce((n, x) => n + x.damage, 0));
-		expect(r.adr).toBeCloseTo(r.damage / r.roundsPlayed, 1);
+		// The simulator still sends round_totaldmg, so this path keeps a test.
+		expect(r.rounds.every((x) => x.damage !== null)).toBe(true);
+		expect(r.damage).toBe(r.rounds.reduce((n, x) => n + x.damage!, 0));
+		expect(r.adr).toBeCloseTo(r.damage! / r.roundsPlayed, 1);
 	});
 
 	it('matches the deaths in match_stats with rounds not survived', () => {
@@ -238,6 +240,11 @@ describe('real capture: wingman', () => {
 	it('leaves kill rewards out of the after-buy money', () => {
 		// Pistol round: $800, no purchase, a kill 10 s into the round paid $300.
 		expect(round(9).moneyFreezeEnd).toBe(800);
+	});
+
+	it('records damage as unknown, since CS2 sends no round_totaldmg', () => {
+		expect(r.rounds.every((x) => x.damage === null)).toBe(true);
+		expect([r.damage, r.adr]).toEqual([null, null]);
 	});
 
 	it('matches match_stats', () => {

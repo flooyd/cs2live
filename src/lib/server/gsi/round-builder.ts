@@ -55,7 +55,8 @@ export interface RoundDraft {
 	primaryWeapon: string | null;
 	kills: number;
 	hsKills: number;
-	damage: number;
+	/** Null until CS2 sends round_totaldmg, which it currently never does. */
+	damage: number | null;
 	healthEnd: number | null;
 	sawDeath: boolean;
 	sawSpectating: boolean;
@@ -141,7 +142,9 @@ export class RoundBuilder {
 				}
 				if (d.moneyFreezeEnd === null) this.snapshotBuy(d, p);
 				this.trackKills(d, p, at);
-				d.damage = Math.max(d.damage, state.round_totaldmg ?? 0);
+				if (typeof state.round_totaldmg === 'number') {
+					d.damage = Math.max(d.damage ?? 0, state.round_totaldmg);
+				}
 				d.healthEnd = state.health ?? d.healthEnd;
 				if (state.health === 0) d.sawDeath = true;
 				d.moneyEnd = money ?? d.moneyEnd;
@@ -234,7 +237,7 @@ export class RoundBuilder {
 			primaryWeapon: null,
 			kills: 0,
 			hsKills: 0,
-			damage: 0,
+			damage: null,
 			healthEnd: null,
 			sawDeath: false,
 			sawSpectating: false,
