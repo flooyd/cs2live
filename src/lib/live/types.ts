@@ -112,6 +112,21 @@ export interface RecentRound {
 	equipValue: number | null;
 }
 
+/**
+ * Your net worth in one round: money plus equipment value, both read together when freeze time
+ * ended (after buying). DERIVED from your own payloads only.
+ */
+export interface NetWorthPoint {
+	round: number;
+	money: number;
+	equipValue: number;
+	total: number;
+	mySide: Side | null;
+	iWon: boolean | null;
+	/** The round being played now; its numbers still change during freeze time. */
+	current: boolean;
+}
+
 export interface LiveView {
 	serverTime: number;
 	connection: {
@@ -188,4 +203,6 @@ export interface LiveView {
 	allPlayers: ObserverPlayerView[] | null;
 	/** Your finished rounds this match, newest first. */
 	recentRounds: RecentRound[];
+	/** Net worth per round you were seen buying in, oldest first, then the round in progress. */
+	netWorth: NetWorthPoint[];
 }

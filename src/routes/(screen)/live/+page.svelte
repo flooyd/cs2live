@@ -7,6 +7,8 @@
 	import RoundStrip from '#lib/live/components/RoundStrip.svelte';
 	import TeamScore from '#lib/live/components/TeamScore.svelte';
 	import SteamIdForm from '#lib/live/components/SteamIdForm.svelte';
+	import SparkArea from '#lib/components/charts/SparkArea.svelte';
+	import { compactMoney } from '#lib/components/charts/scale.ts';
 	import { ago, fixed, money, pct } from '#lib/format.ts';
 	import { grenadeIcon, weaponLabel } from '#lib/cs2/weapons.ts';
 	import { buyLabel, type BuyType } from '#lib/cs2/economy.ts';
@@ -46,6 +48,53 @@
 				? 'var(--warn)'
 				: 'var(--loss)'
 	);
+
+	// Net worth chart: one slot per round up to the regulation length, so the line grows
+	// across the match instead of rescaling every round. Rounds you weren't seen in are gaps.
+	const worth = $derived.by(() => {
+		const pts = v?.netWorth ?? [];
+		if (!v?.map || !pts.length) return null;
+		const { halfLength, regulationRounds: reg } = v.map;
+		const last = Math.max(reg ?? 0, v.map.round, ...pts.map((p) => p.round));
+		const rounds = Array.from({ length: last }, (_, i) => i + 1);
+		const byRound = new Map(pts.map((p) => [p.round, p]));
+		const switches = new Set(v.history.filter((p) => p.switchBefore).map((p) => p.round));
+		const dividers = rounds
+			.filter(
+				(r) =>
+					r > 1 &&
+					(switches.has(r) ||
+						(halfLength !== null && reg !== null && r === halfLength + 1) ||
+						(reg !== null && r === reg + 1))
+			)
+			.map((r) => ({ before: r - 1, label: reg !== null && r > reg ? 'OT' : 'HT' }));
+		return {
+			rounds,
+			points: rounds.map((r) => byRound.get(r) ?? null),
+			dividers,
+			latest: pts.at(-1)!
+		};
+	});
+
+	function worthTitle(i: number): string {
+		const p = worth?.points[i];
+		const parts = [`Round ${worth?.rounds[i] ?? i + 1}`];
+		if (p?.mySide) parts.push(p.mySide);
+		if (p?.iWon === true) parts.push('won');
+		else if (p?.iWon === false) parts.push('lost');
+		else if (p?.current) parts.push('now');
+		return parts.join(' · ');
+	}
+
+	function worthRows(i: number) {
+		const p = worth?.points[i];
+		if (!p) return [];
+		return [
+			{ name: 'Net worth', value: money(p.total), strong: true },
+			{ name: 'Money', value: money(p.money) },
+			{ name: 'Equipment', value: money(p.equipValue) }
+		];
+	}
 
 	// Kill pops: a short "+1" badge whenever this round's kill count goes up.
 	let pops = $state<{ id: number; hs: boolean }[]>([]);
@@ -332,6 +381,32 @@
 						</div>
 					{:else}
 						<p class="muted">Waiting for your own data (CS2 is showing someone else).</p>
+					{/if}
+					{#if worth}
+						<div class="worth">
+							<div class="worth-head">
+								<span
+									class="label"
+									title="Money plus equipment value right after buying, for each round CS2 sent your own data"
+								>
+									Net worth
+								</span>
+								<span class="num">
+									<strong>{money(worth.latest.total)}</strong>
+									<span class="dim small">round {worth.latest.round}</span>
+								</span>
+							</div>
+							<SparkArea
+								labels={worth.rounds.map(String)}
+								values={worth.points.map((p) => p?.total ?? null)}
+								format={compactMoney}
+								title={worthTitle}
+								rows={worthRows}
+								dividers={worth.dividers}
+								height="7.5em"
+								label="Your net worth after buying, each round of this match"
+							/>
+						</div>
 					{/if}
 				</div>
 
@@ -845,6 +920,23 @@
 	.me.dead .big,
 	.me.dead .wname {
 		opacity: 0.55;
+	}
+	.worth {
+		margin-top: auto;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0.35em;
+		padding-top: 0.6em;
+		border-top: 1px solid var(--line);
+	}
+	.worth-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 1em;
+	}
+	.worth-head strong {
+		font-size: 1.15em;
 	}
 	.pophead {
 		display: flex;

@@ -70,6 +70,33 @@ describe('live runtime', () => {
 		expect(last.recentRounds.length).toBe(Math.min(12, saved[0].roundsPlayed));
 	});
 
+	it('tracks net worth per round, with the round in progress last', () => {
+		const { rt, saved } = makeRuntime();
+		const views = play(rt, 'synthetic/full-match');
+
+		for (const v of views) {
+			const rounds = v.netWorth.map((p) => p.round);
+			expect(rounds).toEqual([...rounds].sort((a, b) => a - b));
+			expect(new Set(rounds).size).toBe(rounds.length);
+			expect(v.netWorth.filter((p) => p.current).length).toBeLessThanOrEqual(1);
+			expect(v.netWorth.slice(0, -1).every((p) => !p.current)).toBe(true);
+			for (const p of v.netWorth) expect(p.total).toBe(p.money + p.equipValue);
+		}
+
+		// Once you've bought in a round, the chart has a point for it.
+		const buying = views.filter((v) => v.map?.phase === 'live' && v.round?.phase === 'live');
+		expect(buying.length).toBeGreaterThan(0);
+		for (const v of buying) expect(v.netWorth.at(-1)!.round).toBe(v.map!.round);
+
+		// After the match: every round, none still in progress, results filled in.
+		const last = views.at(-1)!;
+		expect(last.netWorth).toHaveLength(saved[0].roundsPlayed);
+		expect(last.netWorth.some((p) => p.current)).toBe(false);
+		expect(last.netWorth.every((p) => p.iWon !== null)).toBe(true);
+		const r1 = saved[0].rounds.find((r) => r.number === 1)!;
+		expect(last.netWorth[0].total).toBe(r1.moneyFreezeEnd! + r1.equipValue!);
+	});
+
 	it('only estimates the round timer after seeing a phase change', () => {
 		const { rt } = makeRuntime();
 		const views = play(rt, 'synthetic/full-match');

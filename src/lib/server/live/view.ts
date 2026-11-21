@@ -156,7 +156,8 @@ export function buildLiveView(input: ViewInput): LiveView {
 					money: pl.state?.money ?? null
 				}))
 			: null,
-		recentRounds: recentRounds(input.match)
+		recentRounds: recentRounds(input.match),
+		netWorth: netWorth(input.match)
 	};
 }
 
@@ -323,19 +324,28 @@ function history(p: GsiPayload, match: MatchDraft | null): RoundPip[] {
 	return buildRoundPips(p.map?.mode, p.map?.round_wins, sides);
 }
 
+/** Whether you won round `r`, preferring map.round_wins over what the round builder saw. */
+function roundResult(
+	match: MatchDraft,
+	r: { number: number; mySide: Side | null; winnerSide: Side | null; iWon: boolean | null }
+) {
+	const parsed = parseWinReason(match.roundWins[String(r.number)] ?? null);
+	const winner = parsed.side ?? r.winnerSide;
+	return { kind: parsed.kind, iWon: winner && r.mySide ? winner === r.mySide : r.iWon };
+}
+
 function recentRounds(match: MatchDraft | null): LiveView['recentRounds'] {
 	if (!match) return [];
 	return match.rounds.finished
 		.slice(-12)
 		.reverse()
 		.map((r) => {
-			const reason = match.roundWins[String(r.number)] ?? null;
-			const winner = parseWinReason(reason).side ?? r.winnerSide;
+			const result = roundResult(match, r);
 			return {
 				number: r.number,
 				mySide: r.mySide,
-				iWon: winner && r.mySide ? winner === r.mySide : r.iWon,
-				winKind: parseWinReason(reason).kind,
+				iWon: result.iWon,
+				winKind: result.kind,
 				kills: r.kills,
 				hsKills: r.hsKills,
 				damage: r.damage,
@@ -344,4 +354,45 @@ function recentRounds(match: MatchDraft | null): LiveView['recentRounds'] {
 				equipValue: r.equipValue
 			};
 		});
+}
+
+/**
+ * Money plus equipment value after buying, per round. Both come from the same snapshot (the
+ * last payload of yours in the buy window), so buying moves value between them without
+ * changing the total. Rounds you were never seen buying in are left out.
+ */
+function netWorth(match: MatchDraft | null): LiveView['netWorth'] {
+	if (!match) return [];
+	const point = (
+		r: {
+			number: number;
+			mySide: Side | null;
+			moneyFreezeEnd: number | null;
+			equipValue: number | null;
+		},
+		iWon: boolean | null,
+		current: boolean
+	) => {
+		if (r.moneyFreezeEnd === null && r.equipValue === null) return [];
+		const money = r.moneyFreezeEnd ?? 0;
+		const equipValue = r.equipValue ?? 0;
+		return [
+			{
+				round: r.number,
+				money,
+				equipValue,
+				total: money + equipValue,
+				mySide: r.mySide,
+				iWon,
+				current
+			}
+		];
+	};
+	const done = match.rounds.finished.flatMap((r) => point(r, roundResult(match, r).iWon, false));
+	const now = match.rounds.current;
+	const open =
+		now && !done.some((p) => p.round === now.number)
+			? point(now, now.over ? roundResult(match, { ...now, iWon: null }).iWon : null, true)
+			: [];
+	return [...done, ...open];
 }
