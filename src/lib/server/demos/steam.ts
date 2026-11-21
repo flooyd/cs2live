@@ -10,7 +10,7 @@ import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { decodeMatchList, type GcMatchList } from './gc-match-list.ts';
 
 export type DemoErrorKind =
@@ -61,7 +61,8 @@ export async function recentMatches(workDir: string): Promise<GcMatchList> {
 		);
 	}
 	await mkdir(workDir, { recursive: true });
-	const out = join(workDir, 'matches.info');
+	// Absolute: the helper runs in its own folder, so a relative path would point in there.
+	const out = resolve(workDir, 'matches.info');
 	await rm(out, { force: true });
 	const code = await new Promise<number>((resolve) => {
 		// Its stdout includes your Steam ID; it is not logged.

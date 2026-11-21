@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative as relativePath } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadFixture, runFrames } from '../gsi/testing.ts';
 import { fakeSteamId } from '#lib/cs2/steamid.ts';
@@ -94,6 +94,20 @@ describe('DemoFetcher', () => {
 		const off = setup({}, { enabled: false });
 		off.fetcher.tick(off.at(), null);
 		expect(off.deps.isCs2Running).not.toHaveBeenCalled();
+	});
+
+	it('hands the outside world absolute paths, even for a relative data folder', async () => {
+		const { fetcher, deps } = setup();
+		fetcher.remember(real);
+		const relative = new DemoFetcher({
+			dir: relativePath(process.cwd(), dir),
+			deps,
+			sink: { enqueue: () => {} },
+			enabled: () => true,
+			now: () => ended + 60_000
+		});
+		await relative.run();
+		expect(deps.recentMatches).toHaveBeenCalledWith(dir);
 	});
 
 	it('reports a Steam problem and keeps the match waiting', async () => {

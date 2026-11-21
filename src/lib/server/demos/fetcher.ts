@@ -9,7 +9,7 @@
 // Jobs live in CS2LIVE_DATA_DIR/demos/jobs/<match id>.json. Node-only, no framework imports.
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { MatchRecord } from '#lib/match-record.ts';
 import type { GcMatch, GcMatchList } from './gc-match-list.ts';
 import { accountIdOf, findGcMatch, wantsDemoDamage, withDemoDamage } from './match-demo.ts';
@@ -94,7 +94,8 @@ export class DemoFetcher {
 	private lastRunAt: number | null = null;
 
 	constructor(opts: DemoFetcherOptions) {
-		this.dir = opts.dir;
+		// CS2LIVE_DATA_DIR is relative by default; tools we start run in other folders.
+		this.dir = resolve(opts.dir);
 		this.jobsDir = join(opts.dir, 'jobs');
 		this.deps = opts.deps;
 		this.sink = opts.sink;
