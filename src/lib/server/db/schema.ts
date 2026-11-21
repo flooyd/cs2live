@@ -65,8 +65,10 @@ export const matches = pgTable(
 		mvps: integer('mvps').notNull(),
 		score: integer('score').notNull(),
 		hsKills: integer('hs_kills').notNull(),
-		/** Null: unknown (CS2 sends no round_totaldmg). */
+		/** Null: unknown (CS2 sends no round_totaldmg; a match demo can fill it in later). */
 		damage: integer('damage'),
+		/** demo (the match demo's hit events) or gsi (round_totaldmg); null while damage is unknown. */
+		damageSource: text('damage_source').$type<'gsi' | 'demo'>(),
 		roundsPlayed: integer('rounds_played').notNull(),
 		adr: real('adr'),
 		hsPct: real('hs_pct'),

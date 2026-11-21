@@ -4,6 +4,7 @@ import { config, liveEnabled } from '../config.ts';
 import { LiveRuntime } from './runtime.ts';
 import { SettingsFile } from './settings.ts';
 import { createOutbox } from '../sync/index.ts';
+import { createDemoFetcher } from '../demos/index.ts';
 import { getDb } from '../db/index.ts';
 import { RawPayloadBuffer } from '../db/raw-payloads.ts';
 
@@ -31,6 +32,12 @@ function create(): LiveRuntime {
 		appVersion: config.appVersion
 	});
 	rt.sink = createOutbox(config.dataDir, settings, () => rt.broadcast());
+	rt.demos = createDemoFetcher(
+		config.dataDir,
+		rt.sink,
+		() => settings.get().demoDamage,
+		() => rt.broadcast()
+	);
 	setInterval(() => rt.tick(Date.now()), TICK_MS).unref();
 	if (!config.gsiToken) {
 		console.warn('[live] GSI_TOKEN is not set; run `yarn gsi:config` and restart.');

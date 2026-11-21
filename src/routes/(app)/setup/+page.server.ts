@@ -47,6 +47,7 @@ export const load: PageServerLoad = () => {
 			: null,
 		lastPayloadAt: view.connection.lastPayloadAt,
 		sync: view.setup.sync,
+		demos: rt.demos?.view() ?? null,
 		gsi: gsiStatus(rt.gsiToken),
 		hasDb,
 		capture: config.capture,
@@ -94,6 +95,20 @@ export const actions: Actions = {
 		void rt.sink.flush();
 		rt.broadcast();
 		return { syncSaved: true };
+	},
+
+	demos: async ({ request }) => {
+		const rt = getRuntime();
+		if (!rt?.demos) return fail(404, { demosError: 'Live tracking is not available here.' });
+		const form = await request.formData();
+		if (form.get('intent') === 'check') {
+			// Can take a minute (Steam, then a 25 MB download); the page shows the result on reload.
+			void rt.demos.run({ retry: true });
+			return { demosChecking: true };
+		}
+		rt.settings.save({ demoDamage: form.get('enabled') === 'on' });
+		rt.broadcast();
+		return { demosSaved: true };
 	},
 
 	testUpload: async () => {

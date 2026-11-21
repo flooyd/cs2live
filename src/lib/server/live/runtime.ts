@@ -10,6 +10,7 @@ import type { SettingsFile } from './settings.ts';
 import type { LiveView, SyncView } from '#lib/live/types.ts';
 import type { MatchRecord } from '#lib/match-record.ts';
 import type { RawPayloadSink } from '../db/raw-payloads.ts';
+import type { DemoView } from '../demos/fetcher.ts';
 
 /** Where finished matches go (the outbox, which uploads or writes to the database). */
 export interface MatchSink {
@@ -17,6 +18,14 @@ export interface MatchSink {
 	/** Try sending whatever is waiting now (after settings change). */
 	flush(): Promise<void>;
 	status(): SyncView;
+}
+
+/** Fills in damage from match demos after the game (see ../demos/fetcher.ts). */
+export interface DemoQueue {
+	remember(record: MatchRecord): void;
+	tick(now: number, lastPayloadAt: number | null): void;
+	run(opts?: { retry?: boolean }): Promise<void>;
+	view(): DemoView;
 }
 
 export const NULL_SINK: MatchSink = {
@@ -53,6 +62,7 @@ export class LiveRuntime {
 	readonly recorder: GsiRecorder | null;
 	readonly gsiToken: string | null;
 	sink: MatchSink;
+	demos: DemoQueue | null = null;
 	readonly raw: RawPayloadSink | null;
 
 	latest: GsiPayload | null = null;
@@ -131,6 +141,7 @@ export class LiveRuntime {
 					);
 					this.lastSaved = { matchId: e.record.id, at };
 					this.sink.enqueue(e.record);
+					this.demos?.remember(e.record);
 					void this.raw?.save(e.record.id);
 					break;
 				case 'match_discarded':
@@ -142,6 +153,7 @@ export class LiveRuntime {
 	}
 
 	tick(now: number) {
+		this.demos?.tick(now, this.latestAt);
 		const events = this.tracker.tick(now);
 		if (events.length) {
 			this.handleEvents(events, now);

@@ -25,12 +25,18 @@ SvelteKit **3** (not 2), Svelte 5 runes, TypeScript 6, yarn 1, drizzle-orm + pos
   where `LIVE_TRACKING` resolves on: by default everywhere except Vercel (`VERCEL` env set).
 - `DATABASE_URL` is optional. Without it there is no database and no better-auth; the local
   copy uploads to `CS2LIVE_SITE_URL` instead. `getDb()` / `getAuth()` return `null` then.
+- **Damage comes from match demos**, not GSI (CS2 sends none). The local copy keeps each finished
+  official match without damage as a job (`src/lib/server/demos/`). Once CS2 is closed it asks
+  Steam's Game Coordinator for recent matches with `@akiver/boiler-writter` (fails while CS2 runs),
+  downloads the demo, parses it with `@laihoe/demoparser2` (native) and re-sends the match through
+  the outbox. Both are runtime `dependencies`, loaded with `createRequire` from a variable so
+  Vercel's tracer leaves their binaries out of the site bundle.
 
 ## Commands
 
 `yarn dev`, `yarn live`, `yarn build`, `yarn run check` (never `yarn check`), `yarn lint`,
 `yarn test`, `yarn gsi:config [--install]`, `yarn gsi:replay`, `yarn gsi:anonymise`,
-`yarn gsi:fixtures`, `yarn verify:replay`, `yarn db:generate`, `yarn db:migrate`, `yarn db:seed`,
+`yarn gsi:fixtures`, `yarn demo:damage <demo|latest> <steamid>`, `yarn verify:replay`, `yarn db:generate`, `yarn db:migrate`, `yarn db:seed`,
 `yarn db:cleanup`. DB tests (`*.db.spec.ts`) need `TEST_DATABASE_URL`; otherwise they skip.
 Scripts in `scripts/` are plain Node TypeScript (type stripping): use only erasable syntax
 (no enums, no parameter properties) and import relative files with `.ts` extensions.

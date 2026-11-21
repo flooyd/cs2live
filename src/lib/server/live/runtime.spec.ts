@@ -115,6 +115,24 @@ describe('live runtime', () => {
 		for (const e of estimates) expect(Math.max(e.ifWin, e.ifLoss)).toBeLessThanOrEqual(8000);
 	});
 
+	it('hands finished matches to the demo queue and ticks it with the last payload time', () => {
+		const { rt, saved } = makeRuntime(fakeSteamId(100));
+		const remembered: MatchRecord[] = [];
+		const ticks: [number, number | null][] = [];
+		rt.demos = {
+			remember: (r) => remembered.push(r),
+			tick: (now, last) => ticks.push([now, last]),
+			run: () => Promise.resolve(),
+			view: () => {
+				throw new Error('not used');
+			}
+		};
+		play(rt, 'real/wingman-inferno');
+		expect(remembered).toEqual(saved);
+		rt.tick(rt.latestAt! + 1000);
+		expect(ticks.at(-1)).toEqual([rt.latestAt! + 1000, rt.latestAt]);
+	});
+
 	it('only estimates the round timer after seeing a phase change', () => {
 		const { rt } = makeRuntime();
 		const views = play(rt, 'synthetic/full-match');

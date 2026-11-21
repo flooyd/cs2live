@@ -107,6 +107,11 @@ export const matchRecordSchema = z.object({
 	hsKills: z.number().int().min(0),
 	/** Sum over rounds with damage; null when no round had any (see the round field). */
 	damage: z.number().int().min(0).nullable(),
+	/**
+	 * Where damage came from: `demo` (the match demo's hit events, exact) or `gsi`
+	 * (round_totaldmg, which current CS2 never sends). Optional: older clients leave it out.
+	 */
+	damageSource: z.enum(['gsi', 'demo']).nullable().optional(),
 	roundsPlayed: z.number().int().min(0),
 	adr: z.number().nullable(),
 	hsPct: z.number().nullable(),

@@ -202,4 +202,40 @@ describe.skipIf(!TEST_DATABASE_URL)('unknown damage', () => {
 		);
 		expect(oldRounds[0].n).toBe(0);
 	});
+
+	it('stores where damage came from, and keeps a real 0 from a demo', async () => {
+		const me = fakeSteamId(101);
+		const base: MatchRecord = {
+			...runFrames(loadFixture('real/wingman-inferno'), { steamId: fakeSteamId(100) }).records[0],
+			recorderSteamId: me
+		};
+		// An upload from an older client: damage but no source, so it came from GSI.
+		const { damageSource: _, ...oldClient } = {
+			...base,
+			id: randomUUID(),
+			damage: 700,
+			adr: 50,
+			rounds: base.rounds.map((r) => ({ ...r, damage: 50 }))
+		};
+		// A demo where you did no damage at all: 0 is a real number here.
+		const zeroDemo: MatchRecord = {
+			...base,
+			id: randomUUID(),
+			damage: 0,
+			adr: 0,
+			damageSource: 'demo',
+			rounds: base.rounds.map((r) => ({ ...r, damage: 0 }))
+		};
+		const unknown: MatchRecord = { ...base, id: randomUUID() };
+		for (const r of [oldClient, zeroDemo, unknown]) await persistMatch(t.db, r);
+
+		const rows = await t.db.execute<{ id: string; damage: number | null; source: string | null }>(
+			sql`select id, damage, damage_source as source from matches where recorder_steam_id = ${me}`
+		);
+		const byId = new Map(rows.map((r) => [r.id, [r.damage, r.source]]));
+		expect(byId.get(oldClient.id)).toEqual([700, 'gsi']);
+		expect(byId.get(zeroDemo.id)).toEqual([0, 'demo']);
+		expect(byId.get(unknown.id)).toEqual([null, null]);
+		expect((await matchDetail(t.db, zeroDemo.id))?.match.damageSource).toBe('demo');
+	});
 });

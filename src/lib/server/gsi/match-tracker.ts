@@ -345,6 +345,7 @@ export function buildRecord(m: MatchDraft, appVersion: string): MatchRecord {
 		score: self.score,
 		hsKills,
 		damage,
+		damageSource: damage !== null ? 'gsi' : null,
 		roundsPlayed: rounds.length,
 		...derivedRates({
 			damage,

@@ -8,6 +8,8 @@ export interface LocalSettings {
 	steamId: string | null;
 	siteUrl: string | null;
 	uploadKey: string | null;
+	/** Fill in damage from official match demos after the game (on unless turned off). */
+	demoDamage: boolean;
 }
 
 export interface SettingsOverrides {
@@ -16,7 +18,7 @@ export interface SettingsOverrides {
 	uploadKey: string | null;
 }
 
-const EMPTY: LocalSettings = { steamId: null, siteUrl: null, uploadKey: null };
+const EMPTY: LocalSettings = { steamId: null, siteUrl: null, uploadKey: null, demoDamage: true };
 
 export class SettingsFile {
 	private path: string;
@@ -36,7 +38,8 @@ export class SettingsFile {
 			return {
 				steamId: typeof raw.steamId === 'string' ? raw.steamId : null,
 				siteUrl: typeof raw.siteUrl === 'string' ? raw.siteUrl : null,
-				uploadKey: typeof raw.uploadKey === 'string' ? raw.uploadKey : null
+				uploadKey: typeof raw.uploadKey === 'string' ? raw.uploadKey : null,
+				demoDamage: typeof raw.demoDamage === 'boolean' ? raw.demoDamage : true
 			};
 		} catch (err) {
 			console.error(`[settings] could not read ${this.path}:`, err);
@@ -49,7 +52,8 @@ export class SettingsFile {
 		return {
 			steamId: this.overrides.steamId ?? this.saved.steamId,
 			siteUrl: (this.overrides.siteUrl ?? this.saved.siteUrl)?.replace(/\/+$/, '') ?? null,
-			uploadKey: this.overrides.uploadKey ?? this.saved.uploadKey
+			uploadKey: this.overrides.uploadKey ?? this.saved.uploadKey,
+			demoDamage: this.saved.demoDamage
 		};
 	}
 
@@ -58,7 +62,8 @@ export class SettingsFile {
 		return {
 			steamId: this.overrides.steamId !== null,
 			siteUrl: this.overrides.siteUrl !== null,
-			uploadKey: this.overrides.uploadKey !== null
+			uploadKey: this.overrides.uploadKey !== null,
+			demoDamage: false
 		};
 	}
 

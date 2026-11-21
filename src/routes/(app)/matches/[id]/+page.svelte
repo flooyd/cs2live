@@ -18,7 +18,7 @@
 		side === 'CT' ? 'var(--viz-ct)' : side === 'T' ? 'var(--viz-t)' : 'var(--viz-single)';
 	const buy = (b: string | null) => (b ? buyLabel(b as BuyType) : '—');
 
-	// CS2 currently sends no round_totaldmg, so damage is usually unknown (null) for every round.
+	// CS2 sends no round_totaldmg; damage comes from the match demo, when CS2Live could read it.
 	const hasDamage = $derived(!data.remote && data.rounds.some((r) => r.damage !== null));
 
 	const damageColumns = $derived.by((): Column[] => {
@@ -106,10 +106,12 @@
 		<div>
 			<span class="v">{fixed(m.adr)}</span>
 			<span
-				class="label inferred"
+				class={['label', { inferred: m.damageSource !== 'demo' }]}
 				title={m.adr === null
-					? "Unknown: CS2 doesn't send damage (round_totaldmg)"
-					: 'Damage from round_totaldmg per round seen; misses damage after death'}
+					? "Unknown: CS2 doesn't send damage while you play. CS2Live adds it from the match demo after official matches, once CS2 is closed."
+					: m.damageSource === 'demo'
+						? 'From the match demo: your damage to enemies, each hit counted up to the health they had left'
+						: 'Damage from round_totaldmg per round seen; misses damage after death'}
 			>
 				ADR
 			</span>

@@ -3,10 +3,24 @@
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
 	import SteamIdForm from '#lib/live/components/SteamIdForm.svelte';
-	import { ago } from '#lib/format.ts';
+	import { ago, dateTime, fixed } from '#lib/format.ts';
 	import { profileUrl } from '#lib/cs2/steamid.ts';
+	import { mapLabel, modeLabel } from '#lib/cs2/modes.ts';
 
 	let { data, form }: PageProps = $props();
+
+	const DEMO_STATE = {
+		idle: ['Ready', 'win'],
+		'waiting-for-cs2': ['Waiting for CS2 to close', 'warn'],
+		working: ['Working', 'warn'],
+		error: ['Problem', 'loss']
+	} as const;
+	const JOB_STATUS = {
+		waiting: 'Waiting',
+		done: 'Added',
+		'no-demo': 'No demo',
+		failed: 'Failed'
+	} as const;
 </script>
 
 <svelte:head><title>Setup · CS2Live</title></svelte:head>
@@ -161,6 +175,88 @@
 				is down.
 			</p>
 		</section>
+
+		{#if data.demos}
+			{@const demos = data.demos}
+			<section class="panel card wide">
+				<h2>4. Damage from match demos</h2>
+				<p class="muted">
+					CS2 doesn't send damage while you play. After a Premier, Competitive or Wingman match,
+					CS2Live asks Steam for the match demo once you've closed CS2, reads your damage from it
+					and updates the match. Steam has to be running, and while CS2Live asks, Steam shows you as
+					playing CS2 for a few seconds. Steam only lists your last few matches, so close CS2 now
+					and then. Downloaded demos (about 25 MB each) are deleted afterwards.
+				</p>
+				<form method="POST" action="?/demos" use:enhance class="sync">
+					<label class="toggle">
+						<input type="checkbox" name="enabled" checked={demos.enabled} />
+						Fill in damage from match demos
+					</label>
+					<div class="row">
+						<button class="btn primary">Save</button>
+						<button
+							class="btn"
+							name="intent"
+							value="check"
+							disabled={!demos.enabled || !demos.available}
+						>
+							Check now
+						</button>
+					</div>
+					{#if form?.demosChecking}<p class="ok">
+							Checking. Reload this page in a minute for the result.
+						</p>{/if}
+					{#if form?.demosError}<p class="error">{form.demosError}</p>{/if}
+				</form>
+				{#if !demos.available}
+					<p class="error">
+						The Steam helper has no build for this system, so this can't run here.
+					</p>
+				{/if}
+				<div class="syncstate">
+					<span class="label">Status</span>
+					{#if demos.enabled}
+						<span class="chip {DEMO_STATE[demos.state][1]}">{DEMO_STATE[demos.state][0]}</span>
+					{:else}
+						<span class="chip">Off</span>
+					{/if}
+					{#if demos.message}<span class="muted">{demos.message}</span>{/if}
+					{#if demos.lastRunAt}<span class="dim">asked Steam {ago(demos.lastRunAt)}</span>{/if}
+				</div>
+				{#if demos.jobs.length}
+					<div class="jobs">
+						<table class="data">
+							<thead>
+								<tr><th>Match</th><th>Damage</th><th class="r">ADR</th></tr>
+							</thead>
+							<tbody>
+								{#each demos.jobs as job (job.matchId)}
+									<tr>
+										<td>
+											{#if data.hasDb}
+												<a href={resolve('/(app)/matches/[id]', { id: job.matchId })}>
+													{mapLabel(job.map)}
+												</a>
+											{:else}
+												{mapLabel(job.map)}
+											{/if}
+											<span class="dim small">
+												{modeLabel(job.mode)} · {dateTime(job.startedAt)}
+											</span>
+										</td>
+										<td class="status">
+											<span class:ok={job.status === 'done'}>{JOB_STATUS[job.status]}</span>
+											{#if job.message}<div class="dim small">{job.message}</div>{/if}
+										</td>
+										<td class="r num">{job.status === 'done' ? fixed(job.adr) : '—'}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
+			</section>
+		{/if}
 	</div>
 
 	<p><a class="btn primary" href={resolve('/(screen)/live')}>Open the live view</a></p>
@@ -182,6 +278,8 @@
 		margin-bottom: 1.2rem;
 	}
 	.card {
+		/* Grid items default to min-width: auto; let wide content scroll instead of widening the page. */
+		min-width: 0;
 		padding: 1.2rem;
 		display: grid;
 		gap: 0.75rem;
@@ -222,6 +320,18 @@
 		display: flex;
 		gap: 0.5rem;
 		flex-wrap: wrap;
+	}
+	.jobs {
+		overflow-x: auto;
+	}
+	.jobs td.status {
+		white-space: normal;
+		min-width: 12rem;
+	}
+	.sync label.toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
 	.syncstate {
 		display: flex;

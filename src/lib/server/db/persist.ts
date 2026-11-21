@@ -16,10 +16,12 @@ const SAME_GAME_WINDOW_MS = 10 * 60_000;
  * versions from before Nov 2026 recorded that as 0 damage (and 0 ADR) instead of null.
  */
 export function withUnknownDamage(record: MatchRecord): MatchRecord {
-	if (record.damage !== 0) return record;
+	// A demo is exact, so 0 from a demo is a real 0.
+	if (record.damage !== 0 || record.damageSource === 'demo') return record;
 	return {
 		...record,
 		damage: null,
+		damageSource: null,
 		adr: null,
 		rounds: record.rounds.map((r) => ({ ...r, damage: null }))
 	};
@@ -96,6 +98,8 @@ export async function persistMatch(
 			score: record.score,
 			hsKills: record.hsKills,
 			damage: record.damage,
+			// Older clients send no source; their damage, if any, came from GSI.
+			damageSource: record.damageSource ?? (record.damage !== null ? 'gsi' : null),
 			roundsPlayed: record.roundsPlayed,
 			adr: record.adr,
 			hsPct: record.hsPct,

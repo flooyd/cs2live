@@ -435,7 +435,7 @@
 								<span
 									class="label inferred"
 									title={v.matchStats.adr === null
-										? "Unknown: CS2 doesn't send damage (round_totaldmg)"
+										? "Unknown: CS2 doesn't send damage while you play. CS2Live adds it from the match demo after the game."
 										: 'Damage per round, from round_totaldmg while you were alive and in view'}
 								>
 									ADR

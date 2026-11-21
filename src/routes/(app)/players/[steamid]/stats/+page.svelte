@@ -88,13 +88,13 @@
 				<span
 					class="label inferred"
 					title={s.rates.adr === null
-						? "Unknown: CS2 doesn't send damage (round_totaldmg)"
-						: 'Damage per round from round_totaldmg; misses damage after death'}
+						? "Unknown: CS2 doesn't send damage while you play. CS2Live adds it from match demos after official matches."
+						: 'Damage per round over the rounds with known damage (from match demos)'}
 				>
 					ADR
 				</span>
 				<span class="sub num">
-					{t.damageRounds ? `${t.damageRounds} rounds` : 'not sent by CS2'}
+					{t.damageRounds ? `${t.damageRounds} rounds` : 'needs match demos'}
 				</span>
 			</div>
 			<div>
