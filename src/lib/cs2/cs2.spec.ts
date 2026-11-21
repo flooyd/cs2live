@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { fakeSteamId, isFakeSteamId, isSteamId64, parseSteamId } from './steamid.ts';
-import { classifyBuy, estimateNextRoundMoney, nextLossBonus } from './economy.ts';
+import {
+	classifyBuy,
+	economyRules,
+	estimateNextRoundMoney,
+	nextLossBonus,
+	REWARDS
+} from './economy.ts';
 import { mapLabel, isOvertimeRound } from './modes.ts';
 import { parseWinReason, roundWinsList } from './rounds.ts';
 import { weaponLabel } from './weapons.ts';
@@ -59,7 +65,9 @@ describe('economy', () => {
 	});
 
 	it('steps the loss bonus and caps it', () => {
-		expect([0, 1, 2, 3, 4, 5].map(nextLossBonus)).toEqual([1400, 1900, 2400, 2900, 3400, 3400]);
+		expect([0, 1, 2, 3, 4, 5].map((n) => nextLossBonus(n))).toEqual([
+			1400, 1900, 2400, 2900, 3400, 3400
+		]);
 	});
 
 	it('estimates next-round money', () => {
@@ -73,6 +81,18 @@ describe('economy', () => {
 			ifLoss: 16000,
 			ifLossPlanted: null
 		});
+	});
+
+	it('uses Wingman money as seen in a real match', () => {
+		const wingman = economyRules('scrimcomp2v2');
+		expect(economyRules('competitive')).toBe(REWARDS);
+		// Five losses in a row paid +2000, +2300, +2600, +2900, +3200.
+		expect([0, 1, 2, 3, 4].map((n) => nextLossBonus(n, wingman))).toEqual([
+			2000, 2300, 2600, 2900, 3200
+		]);
+		// $1100 + an elimination win was $3850; $5950 + a win hit the $8000 cap.
+		expect(estimateNextRoundMoney(1100, 1, 'CT', wingman).ifWin).toBe(3850);
+		expect(estimateNextRoundMoney(5950, 0, 'T', wingman).ifWin).toBe(8000);
 	});
 });
 

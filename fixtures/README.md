@@ -2,11 +2,12 @@
 
 ## Please capture real matches
 
-Everything CS2Live knows about CS2's Game State Integration feed is a hypothesis built from
-Valve's old CS:GO documentation. Real captures settle it. Please record:
+Most of what CS2Live knows about CS2's Game State Integration feed started as a hypothesis built
+from Valve's old CS:GO documentation. Real captures settle it; one Wingman match has so far (see
+`real/` below). Still wanted:
 
-1. **One full match you play** (competitive or premier, warmup to scoreboard). Die at least a few
-   times so the capture includes spectating a teammate.
+1. **A full Competitive or Premier match you play** (warmup to scoreboard), ideally one that goes
+   to overtime.
 2. **Ideally some spectating**: watch a friend's match in-game, or a GOTV/demo, for a few
    rounds. That shows which observer-only sections (`allplayers_*`, `bomb`, `grenades`,
    `phase_countdowns`) CS2 actually sends.
@@ -23,11 +24,20 @@ yarn live          # or yarn dev
 # play; every payload is appended to captures/gsi-<time>.ndjson
 ```
 
-Captures land in `captures/` (gitignored). They contain your Steam ID, name and the Steam IDs
-and names of players you spectate (the GSI token is stripped). Send them to Claude or drop them
+Captures land in `captures/` (gitignored). They contain your Steam ID, name, clan tag and the
+Steam IDs and names of players you spectate (the GSI token is stripped). Send them to Claude or drop them
 in `fixtures/real/` **after anonymising** (see the `gsi-replay` skill). The first line of each
 capture also records the HTTP headers CS2 sent, which tells us whether CS2 sends a
 `Content-Type` header (see `scripts/live.ts`).
+
+## Real captures (`real/`)
+
+Anonymised with `yarn gsi:anonymise` (Steam IDs from `fakeSteamId(100)`, names `Player 1…n`, clan
+tags blanked). The recorder is `fakeSteamId(100)`. Never edit them by hand.
+
+| File                     | Scenario                                                                                             |
+| ------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `wingman-inferno.ndjson` | Wingman on Inferno, menu to menu, lost 5:9 from T. Dies early in most rounds; ends without an `over` |
 
 ## Synthetic fixtures (`synthetic/`)
 

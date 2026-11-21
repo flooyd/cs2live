@@ -63,8 +63,21 @@ export function buyLabel(buy: BuyType | null | undefined): string {
 	}
 }
 
+export interface EconomyRules {
+	maxMoney: number;
+	lossBonusBase: number;
+	lossBonusStep: number;
+	lossBonusMaxSteps: number;
+	winElimination: number;
+	winTime: number;
+	winBomb: number;
+	winDefuse: number;
+	/** Extra for each T when the bomb was planted but the round was lost. */
+	plantedLossBonus: number;
+}
+
 /** Standard CS2 competitive rewards (estimates; servers can change them). */
-export const REWARDS = {
+export const REWARDS: EconomyRules = {
 	maxMoney: 16000,
 	lossBonusBase: 1400,
 	lossBonusStep: 500,
@@ -73,17 +86,38 @@ export const REWARDS = {
 	winTime: 3250,
 	winBomb: 3500,
 	winDefuse: 3500,
-	/** Extra for each T when the bomb was planted but the round was lost. */
 	plantedLossBonus: 800
-} as const;
+};
+
+/**
+ * Wingman (`scrimcomp2v2`). Measured from a real capture (fixtures/real/wingman-inferno):
+ * $8000 cap, loss bonus $2000 then +$300 per loss in a row (seen up to $3200), $2750 for an
+ * elimination win. The bomb, defuse, time and planted-loss amounts were not seen and are
+ * guesses (competitive minus $500, and the competitive planted bonus).
+ */
+export const WINGMAN_REWARDS: EconomyRules = {
+	maxMoney: 8000,
+	lossBonusBase: 2000,
+	lossBonusStep: 300,
+	lossBonusMaxSteps: 4,
+	winElimination: 2750,
+	winTime: 2750,
+	winBomb: 3000,
+	winDefuse: 3000,
+	plantedLossBonus: 800
+};
+
+export function economyRules(mode: string | null | undefined): EconomyRules {
+	return mode === 'scrimcomp2v2' ? WINGMAN_REWARDS : REWARDS;
+}
 
 /**
  * Loss bonus for the *next* loss, given the team's consecutive_round_losses now.
- * 0 losses in a row -> $1400, 1 -> $1900, ... capped at $3400.
+ * Competitive: 0 losses in a row -> $1400, 1 -> $1900, ... capped at $3400.
  */
-export function nextLossBonus(consecutiveLosses: number): number {
-	const steps = Math.max(0, Math.min(consecutiveLosses, REWARDS.lossBonusMaxSteps));
-	return REWARDS.lossBonusBase + REWARDS.lossBonusStep * steps;
+export function nextLossBonus(consecutiveLosses: number, rules: EconomyRules = REWARDS): number {
+	const steps = Math.max(0, Math.min(consecutiveLosses, rules.lossBonusMaxSteps));
+	return rules.lossBonusBase + rules.lossBonusStep * steps;
 }
 
 export interface NextRoundEstimate {
@@ -99,13 +133,14 @@ export interface NextRoundEstimate {
 export function estimateNextRoundMoney(
 	money: number,
 	consecutiveLosses: number,
-	side: 'CT' | 'T' | null
+	side: 'CT' | 'T' | null,
+	rules: EconomyRules = REWARDS
 ): NextRoundEstimate {
-	const cap = (n: number) => Math.min(REWARDS.maxMoney, n);
-	const loss = nextLossBonus(consecutiveLosses);
+	const cap = (n: number) => Math.min(rules.maxMoney, n);
+	const loss = nextLossBonus(consecutiveLosses, rules);
 	return {
-		ifWin: cap(money + REWARDS.winElimination),
+		ifWin: cap(money + rules.winElimination),
 		ifLoss: cap(money + loss),
-		ifLossPlanted: side === 'T' ? cap(money + loss + REWARDS.plantedLossBonus) : null
+		ifLossPlanted: side === 'T' ? cap(money + loss + rules.plantedLossBonus) : null
 	};
 }

@@ -7,6 +7,7 @@ import { SettingsFile } from './settings.ts';
 import { ingest } from '../gsi/ingest.ts';
 import { loadFixture } from '../gsi/testing.ts';
 import { SIM_ME } from '../gsi/sim/simulate.ts';
+import { fakeSteamId } from '#lib/cs2/steamid.ts';
 import type { LiveView } from '#lib/live/types.ts';
 import type { MatchRecord } from '#lib/match-record.ts';
 
@@ -95,6 +96,23 @@ describe('live runtime', () => {
 		expect(last.netWorth.every((p) => p.iWon !== null)).toBe(true);
 		const r1 = saved[0].rounds.find((r) => r.number === 1)!;
 		expect(last.netWorth[0].total).toBe(r1.moneyFreezeEnd! + r1.equipValue!);
+	});
+
+	it('shows a real Wingman match correctly through to gameover', () => {
+		const { rt, saved } = makeRuntime(fakeSteamId(100));
+		const views = play(rt, 'real/wingman-inferno');
+		expect(saved).toHaveLength(1);
+
+		const over = views.find((v) => v.map?.phase === 'gameover')!;
+		expect(over.map!.round).toBe(14);
+		expect(over.netWorth.map((p) => p.round)).toEqual(Array.from({ length: 14 }, (_, i) => i + 1));
+		// Round 9 pistol: $800 kept + the $200 USP, before the kill reward came in.
+		expect(over.netWorth[8].total).toBe(1000);
+
+		// Wingman caps money at $8000, so no estimate may go past it.
+		const estimates = views.flatMap((v) => (v.economy ? [v.economy] : []));
+		expect(estimates.length).toBeGreaterThan(0);
+		for (const e of estimates) expect(Math.max(e.ifWin, e.ifLoss)).toBeLessThanOrEqual(8000);
 	});
 
 	it('only estimates the round timer after seeing a phase change', () => {

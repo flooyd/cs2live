@@ -49,7 +49,7 @@ hand; change the simulator and regenerate. Tests depend on them.
    yarn gsi:anonymise captures/gsi-xyz.ndjson fixtures/real/halftime.ndjson --from 1200 --to 1500
    ```
    Every SteamID64 (values and `allplayers` keys) becomes a consistent fake ID from
-   `fakeSteamId(100)` up; player names become `Player 1…n` (the recorder is `Player 1`); auth
+   `fakeSteamId(100)` up; player names become `Player 1…n` (the recorder is `Player 1`); clan tags are blanked; auth
    and sensitive headers are dropped. Map, weapon and stat fields are kept.
 4. Check nothing personal is left: `grep -E "7656119|<your name>" fixtures/real/halftime.ndjson`.
 5. Replay it as yourself: `yarn gsi:replay fixtures/real/halftime.ndjson --as <your id> --instant`.

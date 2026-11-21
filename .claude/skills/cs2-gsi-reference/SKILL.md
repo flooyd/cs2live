@@ -5,11 +5,12 @@ description: Field reference for CS2's Game State Integration payloads - which s
 
 # CS2 GSI reference
 
-> **Status: unverified.** No real CS2 capture has been checked in yet (`fixtures/real/` is
-> empty). Everything below comes from Valve's CS:GO-era docs, community notes and our own
-> simulator (`src/lib/server/gsi/sim/simulate.ts`). When a real capture arrives, diff it
-> against this file and `src/lib/server/gsi/schema.ts`, fix both, and remove this banner.
-> Real data wins. Lines marked **(verify)** are the most likely to be wrong.
+> **Status: partly verified.** One real match is checked in: `fixtures/real/wingman-inferno.ndjson`
+> (Wingman, playing not observing, GSI `provider.version` 14200, Nov 2026). A Deathmatch session
+> agreed with it. Lines marked **(seen)** are confirmed by real data; **(verify)** lines are still
+> from Valve's CS:GO-era docs, community notes and our simulator. When a new capture arrives,
+> diff it against this file and `src/lib/server/gsi/schema.ts` and fix both. Real data wins.
+> Still never captured: Competitive/Premier, overtime, observer (`allplayers`).
 
 ## Where things live
 
@@ -38,24 +39,33 @@ description: Field reference for CS2's Game State Integration payloads - which s
 
 ## Sections
 
-| Section               | Sent while playing                   | Notes                                                                                                                                   |
-| --------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `provider`            | always                               | `steamid`, `timestamp` (seconds), `appid` 730, `name` "Counter-Strike: Global Offensive"                                                |
-| `map`                 | in a server; absent in the main menu | `name`, `mode`, `phase`, `round` (rounds completed), `team_ct/team_t`, `round_wins`                                                     |
-| `round`               | in a server                          | `phase`, `win_team` (during `over`), `bomb` (planted/exploded/defused) **(verify)**                                                     |
-| `player`              | always (menu: just id/name)          | you, or the spectated teammate (see above)                                                                                              |
-| `player.state`        | in a server                          | `health`, `armor`, `helmet`, `money`, `equip_value`, `round_kills`, `round_killhs`, `round_totaldmg`, `flashed`, `burning`, `defusekit` |
-| `player.match_stats`  | in a server                          | `kills`, `assists`, `deaths`, `mvps`, `score`                                                                                           |
-| `player.weapons`      | in a server                          | `weapon_0..n` with `name`, `type`, `state` (`active`/`holstered`), `ammo_clip`, `ammo_reserve`                                          |
-| `phase_countdowns`    | probably observer only **(verify)**  | `phase_ends_in` is a **string** of seconds                                                                                              |
-| `bomb`, `grenades`    | observer only **(verify)**           | never relied on                                                                                                                         |
-| `allplayers*`         | observer only                        | keyed by SteamID64                                                                                                                      |
-| `previously`, `added` | most payloads                        | diffs against the last payload; we ignore them                                                                                          |
+| Section               | Sent while playing                    | Notes                                                                                                                                                                        |
+| --------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider`            | always                                | `steamid`, `timestamp` (seconds), `appid` 730, `version`, `name` "Counter-Strike: Global Offensive" **(seen)**                                                               |
+| `map`                 | in a server; absent in the main menu  | `name`, `mode`, `phase`, `round` (rounds completed), `team_ct/team_t`, `round_wins`, `num_matches_to_win_series` **(seen)**                                                  |
+| `round`               | in a server, not in warmup            | `phase`, `win_team` (during `over`), `bomb` (`planted`, `defused` seen; `exploded` **(verify)**)                                                                             |
+| `player`              | almost always (menu: just id/name)    | you, or the spectated teammate (see above). **Missing entirely** in some `over` payloads after your whole team died **(seen)**. Also `clan` (your clan tag), `observer_slot` |
+| `player.state`        | in a server                           | `health`, `armor`, `helmet`, `money`, `equip_value`, `round_kills`, `round_killhs`, `flashed`, `smoked`, `burning`, `health_c4_preview`, `defusekit` **(verify)**            |
+| `player.match_stats`  | in a server                           | `kills`, `assists`, `deaths`, `mvps`, `score` **(seen)**                                                                                                                     |
+| `player.weapons`      | in a server                           | `weapon_0..n` with `name`, `paintkit`, `type`, `state` (`active`/`holstered`), `ammo_clip`, `ammo_reserve`. **Empty** in the payload where you die **(seen)**                |
+| `phase_countdowns`    | **not sent while playing** **(seen)** | observer only, probably; `phase_ends_in` is a **string** of seconds **(verify)**                                                                                             |
+| `bomb`, `grenades`    | observer only **(verify)**            | never relied on                                                                                                                                                              |
+| `allplayers*`         | observer only                         | keyed by SteamID64                                                                                                                                                           |
+| `previously`, `added` | most payloads                         | diffs against the last payload; we ignore them                                                                                                                               |
+
+**`round_totaldmg` is not sent by CS2** **(seen)**: it was in none of the 314 payloads about the
+player in the real match, nor in the Deathmatch session. Damage and ADR cannot be measured from GSI.
 
 ## Phases
 
 - `map.phase`: `warmup` → `live` → (`intermission` at halftime) → `live` → `gameover`.
   The tracker starts a match on `warmup`/`live`, ends it on `gameover`.
+- **The last round never reaches `over`** **(seen)**: CS2 goes straight from `live` to
+  `map.phase: gameover` with **`round.phase: freezetime`** and `map.round` = rounds played. The
+  round builder treats gameover as the end of the open round, never the start of a new one.
+- Halftime arrives as `map.phase: intermission` with `round.phase: over` **(seen)**.
+- `team_ct` / `team_t` scores follow the sides, so they swap at halftime: 6:2 before, 2:6 after
+  **(seen)**.
 - `round.phase`: `freezetime` → `live` → `over`. During `over`, the team score may or may not
   include the round that just ended yet **(verify)**; `round_wins` is the source of truth for
   results.
@@ -68,25 +78,32 @@ description: Field reference for CS2's Game State Integration payloads - which s
 `{ "1": "ct_win_elimination", "2": "t_win_bomb", ... }`, keyed by round number, for the whole
 match so far (also after a mid-match join). Reasons seen in CS:GO and assumed for CS2:
 
-`ct_win_elimination`, `t_win_elimination`, `ct_win_defuse`, `t_win_bomb`, `ct_win_time`,
-`ct_win_rescue`, `t_win_hostage`... and surrenders **(verify the exact strings)**.
+`ct_win_elimination`, `t_win_elimination`, `ct_win_defuse` **(seen)**; `t_win_bomb`,
+`ct_win_time`, `ct_win_rescue`, `t_win_hostage`... and surrenders **(verify the exact strings)**.
 `parseWinReason` only relies on the `ct_` / `t_` prefix and a keyword, so new variants degrade
 to kind `other` instead of breaking.
 
 ## Modes (`map.mode`)
 
 `competitive` and `premier` (MR12: 24 rounds, halves of 12, MR3 overtime), `scrimcomp2v2`
-(Wingman: 16 rounds, halves of 8), `casual`, `deathmatch` and others (no halves). Premier may
-report as `competitive` **(verify)**.
+(Wingman: 16 rounds, halves of 8, first to 9 **(seen)**), `casual`, `deathmatch` **(seen)** and
+others (no halves). Premier may report as `competitive` **(verify)**.
+
+Wingman money differs from Competitive **(seen)**: $8000 cap, loss bonus $2000 then +$300 per
+loss in a row, $2750 for an elimination win. `src/lib/cs2/economy.ts` has both rule sets
+(`economyRules(mode)`). After a win, `consecutive_round_losses` dropped from 5 to 3, then to 2.
 
 ## Known gaps and quirks
 
 - No kill feed, no enemy data, no 10-player scoreboard. Kill events and weapons are INFERRED
   from `round_kills` going up (see `STATS.md`).
-- `round_totaldmg` stops updating when you die.
+- No damage at all: `round_totaldmg` is not sent (see Sections).
+- Dying inside the buy window: the death payload still describes you (`health` 0) with full
+  `equip_value` but an empty `weapons` block, and a kill pays its reward into `money` at once.
+  The buy snapshot stops at your first kill or death for that reason.
 - Joining mid-round: `round_kills` may already include kills from before you were watching.
-- CS2 may omit the `Content-Type` header **(verify: the first capture line records headers)**;
-  `scripts/live.ts` forces JSON for `/api/gsi` because SvelteKit's CSRF check would reject it.
+- CS2 sends `Content-Type: application/json` and `User-Agent: Valve/Steam HTTP Client 1.0 (730)`
+  **(seen)**. `scripts/live.ts` still forces JSON for `/api/gsi` in case that ever changes.
 - `heartbeat` in the cfg is 10 s, so the live view treats more than 15 s of silence as stale.
 - Numbers may arrive as strings in some sections; the schema coerces them.
 

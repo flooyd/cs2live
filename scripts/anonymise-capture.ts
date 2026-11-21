@@ -3,7 +3,8 @@
 // Turns a real GSI capture into a fixture that is safe to commit:
 //   - every SteamID64 (values and allplayers keys) becomes a fake one, consistently, so the
 //     recorder and each spectated player keep their identity across payloads;
-//   - player names become "Player 1", "Player 2", ... (the recorder is always "Player 1");
+//   - player names become "Player 1", "Player 2", ... (the recorder is always "Player 1"), and
+//     clan tags are blanked;
 //   - auth blocks and sensitive request headers are dropped.
 // Map, scores, rounds, weapons and stats are kept as they are: that is what fixtures are for.
 //
@@ -66,8 +67,10 @@ function clean(value: unknown, key = '', parentKey = ''): unknown {
 			if (DROP_KEYS.has(k)) continue;
 			if (key === 'headers' && DROP_HEADERS.test(k)) continue;
 			const outKey = STEAM_ID.test(k) ? fakeId(k) : k;
-			out[outKey] =
-				isPlayer && k === 'name' && typeof v === 'string' ? fakeName(v) : clean(v, k, key);
+			if (isPlayer && typeof v === 'string' && k === 'name') out[outKey] = fakeName(v);
+			// CS2 sends your clan tag in every player block; it identifies you as well as a name.
+			else if (isPlayer && typeof v === 'string' && k === 'clan') out[outKey] = keepNames ? v : '';
+			else out[outKey] = clean(v, k, key);
 		}
 		return out;
 	}

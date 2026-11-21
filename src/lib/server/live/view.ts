@@ -12,7 +12,7 @@ import type {
 	WeaponView
 } from '#lib/live/types.ts';
 import { BOMB_TIMER_S, ROUND_OVER_S, mapLabel, modeInfo } from '#lib/cs2/modes.ts';
-import { estimateNextRoundMoney } from '#lib/cs2/economy.ts';
+import { economyRules, estimateNextRoundMoney } from '#lib/cs2/economy.ts';
 import { asSide, parseWinReason, type Side } from '#lib/cs2/rounds.ts';
 import { isPrimaryType, weaponLabel } from '#lib/cs2/weapons.ts';
 import { derivedRates } from '#lib/match-record.ts';
@@ -162,6 +162,10 @@ export function buildLiveView(input: ViewInput): LiveView {
 }
 
 function roundNumberForView(p: GsiPayload, match: MatchDraft | null): number {
+	// At gameover round.phase is "freezetime" again, but no round is coming: show the last one.
+	if (p.map?.phase === 'gameover' && typeof p.map.round === 'number') {
+		return Math.max(1, p.map.round);
+	}
 	// While a round is "over" the counters may already point at the next round; the tracker's
 	// open round is the reliable answer then.
 	if (p.round?.phase === 'over' && match?.rounds.current) return match.rounds.current.number;
@@ -263,7 +267,7 @@ function economy(
 		mySide === 'T'
 			? (map.team_t?.consecutive_round_losses ?? 0)
 			: (map.team_ct?.consecutive_round_losses ?? 0);
-	const est = estimateNextRoundMoney(me.money, losses, mySide);
+	const est = estimateNextRoundMoney(me.money, losses, mySide, economyRules(map.mode));
 	return {
 		money: me.money,
 		consecutiveLosses: losses,

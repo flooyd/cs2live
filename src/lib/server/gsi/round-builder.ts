@@ -83,9 +83,13 @@ export class RoundBuilder {
 	/** Feeds one in-match payload. Returns rounds that closed because of it. */
 	update(p: GsiPayload, at: number, ctx: RoundContext): RoundRecord[] {
 		const closed: RoundRecord[] = [];
-		const phase = p.round?.phase;
+		// CS2 ends a match with map.phase "gameover" and round.phase "freezetime", skipping "over"
+		// for the last round. That round is over, and no new one is starting; your state in that
+		// payload is already reset for a round that never comes, so it is not read.
+		const gameover = p.map?.phase === 'gameover';
+		const phase = gameover ? 'over' : p.round?.phase;
 		const self = isSelf(p);
-		const state = self ? p.player?.state : undefined;
+		const state = self && !gameover ? p.player?.state : undefined;
 		const matchStats = self ? stats(p.player?.match_stats) : null;
 
 		if (phase === 'freezetime' || phase === 'live') {
@@ -129,7 +133,10 @@ export class RoundBuilder {
 				if (d.moneyFreezeStart === null) d.moneyFreezeStart = money;
 				this.snapshotBuy(d, p);
 			} else if (phase === 'live' || phase === 'over') {
-				if (phase === 'live' && d.liveAt !== null && at - d.liveAt <= BUY_WINDOW_MS) {
+				// Late buys count, until the fighting starts: a kill pays its reward into your
+				// money, and dying empties `weapons` (equip_value keeps the old value).
+				const quiet = (state.health ?? 0) > 0 && (state.round_kills ?? 0) === 0;
+				if (phase === 'live' && d.liveAt !== null && at - d.liveAt <= BUY_WINDOW_MS && quiet) {
 					this.snapshotBuy(d, p);
 				}
 				if (d.moneyFreezeEnd === null) this.snapshotBuy(d, p);
@@ -244,8 +251,12 @@ export class RoundBuilder {
 		const state = p.player?.state;
 		d.moneyFreezeEnd = state?.money ?? d.moneyFreezeEnd;
 		d.equipValue = state?.equip_value ?? d.equipValue;
-		d.weaponsFreezeEnd = weaponSnaps(p.player);
-		d.primaryWeapon = primaryWeapon(p.player);
+		// A living player always holds at least a knife; an empty list means dead (or no data).
+		const weapons = weaponSnaps(p.player);
+		if (weapons.length) {
+			d.weaponsFreezeEnd = weapons;
+			d.primaryWeapon = primaryWeapon(p.player);
+		}
 	}
 
 	/** INFERRED kill events: round_kills went up; headshot if round_killhs went up too. */

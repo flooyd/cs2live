@@ -5,6 +5,7 @@ import { parsePayload } from './schema.ts';
 import { SIM_ME, SIM_TEAMMATES, simulateMatch, type Frame } from './sim/simulate.ts';
 import { matchRecordSchema, type MatchRecord } from '#lib/match-record.ts';
 import { roundWinsList } from '#lib/cs2/rounds.ts';
+import { fakeSteamId } from '#lib/cs2/steamid.ts';
 
 const me = SIM_ME.steamId;
 
@@ -195,6 +196,54 @@ describe('wingman', () => {
 		expect(r.mode).toBe('scrimcomp2v2');
 		expect(r.rounds[8]?.buyType).toBe('pistol');
 		expect(r.rounds[8]?.mySide).not.toBe(r.rounds[7].mySide);
+	});
+});
+
+// A real CS2 capture (anonymised): Wingman on Inferno, lost 5:9 starting as T. The recorder
+// died early in most rounds, often inside the buy window, and the match ended on a round that
+// never reached round.phase "over": gameover arrived with round.phase "freezetime".
+describe('real capture: wingman', () => {
+	const frames = loadFixture('real/wingman-inferno');
+	const recorder = fakeSteamId(100);
+	const r = only(runFrames(frames, { steamId: recorder }).records);
+	const round = (n: number) => r.rounds.find((x) => x.number === n)!;
+
+	it('saves the match with exactly the 14 rounds that were played', () => {
+		expect(r.status).toBe('complete');
+		expect(r.mode).toBe('scrimcomp2v2');
+		expect([r.scoreMine, r.scoreTheirs, r.result]).toEqual([5, 9, 'loss']);
+		expect(r.mySideStart).toBe('T');
+		expect(r.rounds.map((x) => x.number)).toEqual(Array.from({ length: 14 }, (_, i) => i + 1));
+		expect(r.roundsPlayed).toBe(14);
+		expect(r.rounds.every((x) => x.winReason !== null)).toBe(true);
+	});
+
+	it('keeps the last round, which went straight to gameover', () => {
+		expect(round(14)).toMatchObject({
+			mySide: 'CT',
+			winnerSide: 'T',
+			iWon: false,
+			survived: false
+		});
+		expect(round(14).equipValue).not.toBeNull();
+	});
+
+	it('keeps the loadout when you die inside the buy window', () => {
+		for (const x of r.rounds)
+			expect(x.weaponsFreezeEnd.length, `round ${x.number}`).toBeGreaterThan(0);
+		expect(round(3).primaryWeapon).toBe('weapon_ak47');
+		expect(round(3).equipValue).toBe(4100);
+	});
+
+	it('leaves kill rewards out of the after-buy money', () => {
+		// Pistol round: $800, no purchase, a kill 10 s into the round paid $300.
+		expect(round(9).moneyFreezeEnd).toBe(800);
+	});
+
+	it('matches match_stats', () => {
+		expect([r.kills, r.assists, r.deaths]).toEqual([8, 1, 11]);
+		expect(r.rounds.reduce((n, x) => n + x.kills, 0)).toBe(8);
+		expect(r.rounds.filter((x) => x.survived === false)).toHaveLength(11);
 	});
 });
 
