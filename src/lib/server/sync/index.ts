@@ -14,12 +14,15 @@ export function createOutbox(dataDir: string, settings: SettingsFile, onChange: 
 				mode: 'direct',
 				label: 'database',
 				send: (record) =>
-					persistMatch(db, record).catch((err: unknown) => {
-						if (err instanceof RecorderMismatchError) {
-							throw new PermanentSyncError(err.message, { cause: err });
+					persistMatch(db, record).then(
+						() => {},
+						(err: unknown) => {
+							if (err instanceof RecorderMismatchError) {
+								throw new PermanentSyncError(err.message, { cause: err });
+							}
+							throw err;
 						}
-						throw err;
-					})
+					)
 			};
 		}
 		const { siteUrl, uploadKey } = settings.get();

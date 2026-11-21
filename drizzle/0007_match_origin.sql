@@ -1,0 +1,1 @@
+ALTER TABLE "matches" ADD COLUMN "origin" text DEFAULT 'gsi' NOT NULL;

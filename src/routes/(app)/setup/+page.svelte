@@ -17,7 +17,7 @@
 	} as const;
 	const JOB_STATUS = {
 		waiting: 'Waiting',
-		done: 'Added',
+		done: 'Damage added',
 		'no-demo': 'No demo',
 		failed: 'Failed'
 	} as const;
@@ -179,13 +179,19 @@
 		{#if data.demos}
 			{@const demos = data.demos}
 			<section class="panel card wide">
-				<h2>4. Damage from match demos</h2>
+				<h2>4. Match demos</h2>
 				<p class="muted">
 					CS2 doesn't send damage while you play. After a Premier, Competitive or Wingman match,
 					CS2Live asks Steam for the match demo once you've closed CS2, reads your damage from it
 					and updates the match. Steam has to be running, and while CS2Live asks, Steam shows you as
 					playing CS2 for a few seconds. Steam only lists your last few matches, so close CS2 now
 					and then. Downloaded demos (about 25 MB each) are deleted afterwards.
+				</p>
+				<p class="muted">
+					<strong>Import recent matches</strong> adds the matches in that list that CS2Live didn't record
+					(played before you set it up, or while it wasn't running), built entirely from their demos:
+					rounds, kills, money, damage and your teammates' scoreboard. Times are approximate, within about
+					a minute.
 				</p>
 				<form method="POST" action="?/demos" use:enhance class="sync">
 					<label class="toggle">
@@ -202,9 +208,15 @@
 						>
 							Check now
 						</button>
+						<button class="btn" name="intent" value="import" disabled={!demos.available}>
+							Import recent matches
+						</button>
 					</div>
 					{#if form?.demosChecking}<p class="ok">
 							Checking. Reload this page in a minute for the result.
+						</p>{/if}
+					{#if form?.demosImporting}<p class="ok">
+							Importing. Each match takes a few seconds; reload this page for the result.
 						</p>{/if}
 					{#if form?.demosError}<p class="error">{form.demosError}</p>{/if}
 				</form>
@@ -215,7 +227,7 @@
 				{/if}
 				<div class="syncstate">
 					<span class="label">Status</span>
-					{#if demos.enabled}
+					{#if demos.enabled || demos.state !== 'idle' || demos.message}
 						<span class="chip {DEMO_STATE[demos.state][1]}">{DEMO_STATE[demos.state][0]}</span>
 					{:else}
 						<span class="chip">Off</span>
@@ -227,7 +239,7 @@
 					<div class="jobs">
 						<table class="data">
 							<thead>
-								<tr><th>Match</th><th>Damage</th><th class="r">ADR</th></tr>
+								<tr><th>Match</th><th>Demo</th><th class="r">ADR</th></tr>
 							</thead>
 							<tbody>
 								{#each demos.jobs as job (job.matchId)}
@@ -245,8 +257,12 @@
 											</span>
 										</td>
 										<td class="status">
-											<span class:ok={job.status === 'done'}>{JOB_STATUS[job.status]}</span>
-											{#if job.message}<div class="dim small">{job.message}</div>{/if}
+											<span class:ok={job.status === 'done'}>
+												{job.imported ? 'Imported' : JOB_STATUS[job.status]}
+											</span>
+											{#if job.message && !job.imported}<div class="dim small">
+													{job.message}
+												</div>{/if}
 										</td>
 										<td class="r num">{job.status === 'done' ? fixed(job.adr) : '—'}</td>
 									</tr>

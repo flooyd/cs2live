@@ -101,6 +101,11 @@ export const actions: Actions = {
 		const rt = getRuntime();
 		if (!rt?.demos) return fail(404, { demosError: 'Live tracking is not available here.' });
 		const form = await request.formData();
+		if (form.get('intent') === 'import') {
+			// A few seconds per match (download and read); the page shows the result on reload.
+			void rt.demos.importRecent();
+			return { demosImporting: true };
+		}
 		if (form.get('intent') === 'check') {
 			// Can take a minute (Steam, then a 25 MB download); the page shows the result on reload.
 			void rt.demos.run({ retry: true });

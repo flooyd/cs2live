@@ -87,6 +87,14 @@
 					</span>
 				{/if}
 				{#if m.source === 'upload'}<span class="chip">Uploaded</span>{/if}
+				{#if m.origin === 'demo'}
+					<span
+						class="chip"
+						title="Not recorded live: built afterwards from the official match demo. Every number comes from the demo; times are approximate (within about a minute)."
+					>
+						From the match demo
+					</span>
+				{/if}
 			</div>
 		</div>
 		<div class="score">
@@ -271,12 +279,16 @@
 		{#if data.sightings.length}
 			<section class="panel block">
 				<h2>
-					<span
-						class="inferred"
-						title="Only what CS2 sent while the recorder spectated these players"
-					>
-						Players spectated
-					</span>
+					{#if m.origin === 'demo'}
+						Teammates
+					{:else}
+						<span
+							class="inferred"
+							title="Only what CS2 sent while the recorder spectated these players"
+						>
+							Players spectated
+						</span>
+					{/if}
 				</h2>
 				<table class="data">
 					<thead>
@@ -310,7 +322,11 @@
 						{/each}
 					</tbody>
 				</table>
-				<p class="dim small">Stats as of the last time the recorder spectated them, not final.</p>
+				<p class="dim small">
+					{m.origin === 'demo'
+						? 'Final scoreboard, from the match demo.'
+						: 'Stats as of the last time the recorder spectated them, not final.'}
+				</p>
 			</section>
 		{/if}
 

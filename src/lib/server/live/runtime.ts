@@ -25,6 +25,7 @@ export interface DemoQueue {
 	remember(record: MatchRecord): void;
 	tick(now: number, lastPayloadAt: number | null): void;
 	run(opts?: { retry?: boolean }): Promise<void>;
+	importRecent(): Promise<void>;
 	view(): DemoView;
 }
 

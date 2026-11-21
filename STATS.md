@@ -17,6 +17,27 @@ no kill feed and no scoreboard, so nothing about enemies is ever recorded.
 Stats on a player's Stats page come only from matches **that player recorded**. Partial sightings
 have no round data, so they appear in match lists but not in stats.
 
+## Matches imported from demos
+
+`/setup` → **Import recent matches** adds official matches CS2Live didn't record (Steam lists your
+last 8 or so Premier, Competitive and Wingman matches), built entirely from the match demo
+(`src/lib/server/demos/demo-record.ts`). `matches.origin` is `demo` for these (`gsi` for live
+recordings) and the match page says "From the match demo". The demo records everything, so every
+value is OBSERVED, with the same meaning as for a live recording:
+
+- Kills, HS kills and assists per round: enemies only (no team kills), from the kill events;
+  after the round is decided they still count for it. Match totals are the scoreboard's.
+- Money, equipment value, weapons and buy type: read at the same moments the live tracker reads
+  them (freeze time start; within 15 s of freeze end, before your first kill or death).
+- Survived and health: at the round's end. MVP: the scoreboard's MVPs went up in the round.
+- **Times are approximate** (up to about a minute early): demos have no clock, so tick 0 is placed
+  at Steam's match time, which is when the match was made, not when the server started.
+- Teammates are stored as sightings with their **final** scoreboard (opponents are left out, as
+  in a live recording). Bots are skipped.
+
+An import never doubles a match the same player already has: same map and overlapping times
+counts as the same game, and importing a demo again updates the same match.
+
 ## Per match
 
 | Stat                                | Tag      | Definition                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -95,5 +116,6 @@ matches, after the map, mode and period filters.
 While the recorder is dead, CS2 sends the spectated player's `player` block. CS2Live keeps the
 last values seen for each spectated player in that match: name, team relative to the recorder,
 kills, assists, deaths, MVPs, score, and the first and last round they were seen. These are
-**as last seen, not final**, and there is no damage or round data for them. A sighting is never
+**as last seen, not final**, and there is no damage or round data for them (for a match
+imported from its demo they are the final scoreboard). A sighting is never
 shown for a game the player recorded themselves, and one game seen by several recorders counts once.

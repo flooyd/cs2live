@@ -112,6 +112,11 @@ export const matchRecordSchema = z.object({
 	 * (round_totaldmg, which current CS2 never sends). Optional: older clients leave it out.
 	 */
 	damageSource: z.enum(['gsi', 'demo']).nullable().optional(),
+	/**
+	 * How the match got here: `gsi`, recorded live while you played, or `demo`, imported
+	 * afterwards from the official match demo. Optional: older clients leave it out (`gsi`).
+	 */
+	origin: z.enum(['gsi', 'demo']).optional(),
 	roundsPlayed: z.number().int().min(0),
 	adr: z.number().nullable(),
 	hsPct: z.number().nullable(),

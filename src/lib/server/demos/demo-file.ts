@@ -10,6 +10,17 @@ import bz2 from 'unbzip2-stream';
 import { findCs2CfgDir } from '../gsi/cs2-paths.ts';
 import { decodeMatchInfo, type GcMatch } from './gc-match-list.ts';
 import { damageByRound, type FreezeEndEvent, type HurtEvent } from './demo-damage.ts';
+import {
+	PLAYER_PROPS,
+	sampleTicks,
+	type BombEvent,
+	type DeathEvent,
+	type DemoEvent,
+	type DemoEvents,
+	type DemoMatchData,
+	type PlayerTick,
+	type RoundEndEvent
+} from './demo-record.ts';
 import { DemoError } from './steam.ts';
 
 /** CS2's own demo folder (`game/csgo/replays`), where the Watch tab saves downloads. */
@@ -83,6 +94,8 @@ interface DemoParser {
 	parseHeader(path: string): { map_name?: string };
 	parsePlayerInfo(path: string): { steamid?: string | number }[];
 	parseEvent(path: string, event: string, player?: string[], other?: string[]): unknown[];
+	parseEvents(path: string, events: string[], player?: string[], other?: string[]): unknown[];
+	parseTicks(path: string, props: string[], ticks?: number[]): unknown[];
 }
 
 // demoparser2 is a native module. Loaded on first use, from a variable so bundlers and Vercel's
@@ -119,6 +132,71 @@ export function parseDemo(path: string, steamId: string): ParsedDemo {
 			present: players.some((p) => String(p.steamid) === steamId),
 			...damageByRound(steamId, hurt as HurtEvent[], freeze as FreezeEndEvent[])
 		};
+	} catch (err) {
+		throw new DemoError('failed', `Could not read the demo: ${(err as Error).message}`, {
+			cause: err
+		});
+	}
+}
+
+const MATCH_EVENTS = [
+	'begin_new_match',
+	'round_start',
+	'round_freeze_end',
+	'round_end',
+	'cs_win_panel_match',
+	'player_death',
+	'player_hurt',
+	'bomb_planted',
+	'bomb_defused',
+	'bomb_exploded',
+	'rank_update',
+	'server_cvar'
+];
+
+/** Everything `matchFromDemo` needs, in two passes over the demo (events, then player state). */
+export function readDemoMatch(path: string, steamId: string): DemoMatchData {
+	try {
+		const dp = loadParser();
+		const header = dp.parseHeader(path);
+		const rows = dp.parseEvents(
+			path,
+			MATCH_EVENTS,
+			['team_num'],
+			['total_rounds_played', 'is_warmup_period']
+		) as (DemoEvent & Record<string, unknown>)[];
+		const of = <T>(name: string) => rows.filter((r) => r.event_name === name) as T[];
+		const bomb = (name: string, kind: BombEvent['kind']): BombEvent[] =>
+			of<DemoEvent>(name).map((e) => ({ tick: e.tick, kind }));
+		const cvars: Record<string, string> = {};
+		for (const c of of<Record<string, unknown>>('server_cvar')) {
+			const name = c.name ?? c.cvarname;
+			const value = c.value ?? c.cvarvalue;
+			if (typeof name === 'string' && (typeof value === 'string' || typeof value === 'number')) {
+				cvars[name] = String(value);
+			}
+		}
+		const events: DemoEvents = {
+			map: header.map_name ?? null,
+			rankTypeIds: of<{ rank_type_id?: unknown }>('rank_update')
+				.map((e) => e.rank_type_id)
+				.filter((t): t is number => typeof t === 'number'),
+			cvars,
+			matchStarts: of<DemoEvent>('begin_new_match'),
+			roundStarts: of<DemoEvent>('round_start'),
+			freezeEnds: of<FreezeEndEvent>('round_freeze_end'),
+			roundEnds: of<RoundEndEvent>('round_end'),
+			matchEnds: of<DemoEvent>('cs_win_panel_match'),
+			deaths: of<DeathEvent>('player_death'),
+			hurt: of<HurtEvent>('player_hurt'),
+			bombs: [
+				...bomb('bomb_planted', 'planted'),
+				...bomb('bomb_defused', 'defused'),
+				...bomb('bomb_exploded', 'exploded')
+			].sort((a, b) => a.tick - b.tick)
+		};
+		const ticks = dp.parseTicks(path, [...PLAYER_PROPS], sampleTicks(events, steamId));
+		return { ...events, ticks: ticks as PlayerTick[] };
 	} catch (err) {
 		throw new DemoError('failed', `Could not read the demo: ${(err as Error).message}`, {
 			cause: err

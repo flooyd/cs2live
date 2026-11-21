@@ -123,6 +123,7 @@ describe('live runtime', () => {
 			remember: (r) => remembered.push(r),
 			tick: (now, last) => ticks.push([now, last]),
 			run: () => Promise.resolve(),
+			importRecent: () => Promise.resolve(),
 			view: () => {
 				throw new Error('not used');
 			}

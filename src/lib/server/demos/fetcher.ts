@@ -6,6 +6,10 @@
 // take the demo from CS2's replays folder or download it, read your damage per round and send the
 // match again through the outbox with the damage filled in. Downloaded demos are deleted after.
 //
+// It can also import matches CS2Live never recorded (importRecent): every official match in
+// Steam's recent list that no job covers is built entirely from its demo (demo-record.ts) and
+// kept as a finished job, so it isn't imported twice.
+//
 // Jobs live in CS2LIVE_DATA_DIR/demos/jobs/<match id>.json. Node-only, no framework imports.
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
@@ -15,6 +19,7 @@ import type { GcMatch, GcMatchList } from './gc-match-list.ts';
 import { accountIdOf, findGcMatch, wantsDemoDamage, withDemoDamage } from './match-demo.ts';
 import { DemoError } from './steam.ts';
 import type { DemoOnDisk, ParsedDemo } from './demo-file.ts';
+import { demoRecordId, matchFromDemo, type DemoMatchData } from './demo-record.ts';
 
 export type DemoJobStatus = 'waiting' | 'done' | 'no-demo' | 'failed';
 
@@ -34,6 +39,7 @@ export interface DemoDeps {
 	recentMatches: (workDir: string) => Promise<GcMatchList>;
 	obtainDemo: (match: GcMatch, workDir: string) => Promise<DemoOnDisk>;
 	parseDemo: (path: string, steamId: string) => ParsedDemo;
+	readDemoMatch: (path: string, steamId: string) => DemoMatchData;
 }
 
 export interface DemoView {
@@ -51,6 +57,8 @@ export interface DemoView {
 		status: DemoJobStatus;
 		message: string | null;
 		adr: number | null;
+		/** Built from the demo, not recorded live. */
+		imported: boolean;
 	}[];
 }
 
@@ -60,6 +68,10 @@ export interface DemoFetcherOptions {
 	/** Where the match goes once it has damage (the outbox). */
 	sink: { enqueue(record: MatchRecord): void };
 	enabled: () => boolean;
+	/** The Steam ID this copy tracks: whose matches get imported. */
+	steamId?: () => string | null;
+	/** Stamped on imported matches. */
+	appVersion?: string;
 	onChange?: () => void;
 	now?: () => number;
 }
@@ -84,6 +96,8 @@ export class DemoFetcher {
 	private deps: DemoDeps;
 	private sink: DemoFetcherOptions['sink'];
 	private enabled: () => boolean;
+	private steamId: () => string | null;
+	private appVersion: string;
 	private onChange: () => void;
 	private now: () => number;
 	private jobs = new Map<string, DemoJob>();
@@ -100,6 +114,8 @@ export class DemoFetcher {
 		this.deps = opts.deps;
 		this.sink = opts.sink;
 		this.enabled = opts.enabled;
+		this.steamId = opts.steamId ?? (() => null);
+		this.appVersion = opts.appVersion ?? 'unknown';
 		this.onChange = opts.onChange ?? (() => {});
 		this.now = opts.now ?? Date.now;
 		this.load();
@@ -170,10 +186,24 @@ export class DemoFetcher {
 
 	/** One pass over the waiting matches. `retry` also retries ones that gave up. */
 	run({ retry = false } = {}): Promise<void> {
-		this.running ??= this.pass(retry).finally(() => {
-			this.running = null;
-		});
-		return this.running;
+		return this.running ?? this.exclusive(() => this.pass(retry));
+	}
+
+	/** Imports Steam's recent official matches that CS2Live didn't record. Queued after a run. */
+	importRecent(): Promise<void> {
+		return this.exclusive(() => this.importPass());
+	}
+
+	/** One Steam conversation at a time: the helper can't run twice. */
+	private exclusive(task: () => Promise<void>): Promise<void> {
+		const p: Promise<void> = (this.running ?? Promise.resolve())
+			.catch(() => {})
+			.then(task)
+			.finally(() => {
+				if (this.running === p) this.running = null;
+			});
+		this.running = p;
+		return p;
 	}
 
 	private setState(state: DemoView['state'], message: string | null) {
@@ -181,6 +211,31 @@ export class DemoFetcher {
 		this.state = state;
 		this.message = message;
 		this.onChange();
+	}
+
+	/** Steam's match list, or null after setting the state to why not. */
+	private async askSteam(): Promise<GcMatchList | null> {
+		if (!this.deps.available()) {
+			this.setState('error', `The Steam helper has no build for ${process.platform}.`);
+			return null;
+		}
+		// Steam answers the helper only while CS2 is closed; never poke it during a game.
+		if ((await this.deps.isCs2Running()) === true) {
+			this.setState('waiting-for-cs2', 'Waiting for CS2 to close.');
+			return null;
+		}
+		this.setState('working', 'Asking Steam for your recent matches…');
+		try {
+			const list = await this.deps.recentMatches(this.dir);
+			this.lastRunAt = this.now();
+			return list;
+		} catch (err) {
+			const e = err instanceof DemoError ? err : new DemoError('failed', String(err));
+			console.log(`[demos] ${e.message}`);
+			this.nextAttemptAt = this.now() + RETRY_MS;
+			this.setState(e.kind === 'cs2-open' ? 'waiting-for-cs2' : 'error', e.message);
+			return null;
+		}
 	}
 
 	private async pass(retry: boolean) {
@@ -197,28 +252,8 @@ export class DemoFetcher {
 			this.setState('idle', null);
 			return;
 		}
-		if (!this.deps.available()) {
-			this.setState('error', `The Steam helper has no build for ${process.platform}.`);
-			return;
-		}
-		// Steam answers the helper only while CS2 is closed; never poke it during a game.
-		if ((await this.deps.isCs2Running()) === true) {
-			this.setState('waiting-for-cs2', 'Waiting for CS2 to close.');
-			return;
-		}
-		this.setState('working', 'Asking Steam for your recent matches…');
-
-		let list: GcMatchList;
-		try {
-			list = await this.deps.recentMatches(this.dir);
-		} catch (err) {
-			const e = err instanceof DemoError ? err : new DemoError('failed', String(err));
-			console.log(`[demos] ${e.message}`);
-			this.nextAttemptAt = this.now() + RETRY_MS;
-			this.setState(e.kind === 'cs2-open' ? 'waiting-for-cs2' : 'error', e.message);
-			return;
-		}
-		this.lastRunAt = this.now();
+		const list = await this.askSteam();
+		if (!list) return;
 
 		let done = 0;
 		for (const job of waiting) {
@@ -285,6 +320,84 @@ export class DemoFetcher {
 		}
 	}
 
+	private async importPass() {
+		const steamId = this.steamId();
+		if (!steamId) {
+			this.setState('error', 'Save your Steam ID above before importing matches.');
+			return;
+		}
+		const list = await this.askSteam();
+		if (!list) return;
+		const me = accountIdOf(steamId);
+		if (list.accountId !== null && list.accountId !== me) {
+			this.setState(
+				'error',
+				'Steam is logged in to a different account than the Steam ID CS2Live tracks.'
+			);
+			return;
+		}
+
+		// Matches we already have: imported ones by id, recorded ones by the entry they match.
+		const records = [...this.jobs.values()].map((j) => j.record);
+		const known = new Set(records.map((r) => r.id));
+		const claimed = new Set(
+			records.filter((r) => r.origin !== 'demo').map((r) => findGcMatch(r, list.matches)?.matchId)
+		);
+		const fresh = list.matches
+			.filter((m) => m.accountIds.includes(me))
+			.filter((m) => !claimed.has(m.matchId) && !known.has(demoRecordId(m.matchId, steamId)))
+			.sort((a, b) => a.matchTime - b.matchTime);
+
+		let imported = 0;
+		const problems: string[] = [];
+		for (const [i, match] of fresh.entries()) {
+			this.setState('working', `Importing match ${i + 1} of ${fresh.length} from its demo…`);
+			let demo: DemoOnDisk | null = null;
+			try {
+				demo = await this.deps.obtainDemo(match, this.dir);
+				const data = this.deps.readDemoMatch(demo.path, steamId);
+				const record = matchFromDemo(data, {
+					steamId,
+					gcMatchId: match.matchId,
+					matchTime: match.matchTime,
+					appVersion: this.appVersion
+				});
+				if (!record) throw new DemoError('failed', 'You are not in this match’s demo.');
+				this.sink.enqueue(record);
+				const job: DemoJob = {
+					record,
+					status: 'done',
+					attempts: 0,
+					message: 'Imported from the match demo.',
+					updatedAt: 0
+				};
+				this.jobs.set(record.id, job);
+				this.save(job);
+				imported++;
+				console.log(`[demos] imported ${record.map} ${record.scoreMine}-${record.scoreTheirs}`);
+			} catch (err) {
+				const e = err instanceof DemoError ? err : new DemoError('failed', String(err));
+				console.log(`[demos] import of ${match.matchId}: ${e.message}`);
+				problems.push(e.message);
+			} finally {
+				if (demo?.temporary) await rm(demo.path, { force: true }).catch(() => {});
+			}
+			this.onChange();
+		}
+
+		const parts: string[] = [];
+		if (imported) parts.push(`Imported ${imported} match${imported === 1 ? '' : 'es'}.`);
+		else if (!problems.length) {
+			parts.push(
+				`Nothing new: CS2Live already has all ${list.matches.length} matches Steam lists.`
+			);
+		}
+		if (problems.length) {
+			parts.push(`${problems.length} could not be imported: ${[...new Set(problems)].join(' ')}`);
+		}
+		this.setState(problems.length && !imported ? 'error' : 'idle', parts.join(' '));
+	}
+
 	private finish(job: DemoJob, status: DemoJobStatus, message: string | null) {
 		job.status = status;
 		job.message = message;
@@ -301,7 +414,8 @@ export class DemoFetcher {
 				startedAt: j.record.startedAt,
 				status: j.status,
 				message: j.message,
-				adr: j.record.adr
+				adr: j.record.adr,
+				imported: j.record.origin === 'demo'
 			}));
 		return {
 			enabled: this.enabled(),

@@ -238,4 +238,41 @@ describe.skipIf(!TEST_DATABASE_URL)('unknown damage', () => {
 		expect(byId.get(unknown.id)).toEqual([null, null]);
 		expect((await matchDetail(t.db, zeroDemo.id))?.match.damageSource).toBe('demo');
 	});
+
+	it('stores matches imported from demos, and never doubles a recorded one', async () => {
+		const me = fakeSteamId(102);
+		const base = runFrames(loadFixture('real/wingman-inferno'), { steamId: fakeSteamId(100) })
+			.records[0];
+		const recorded: MatchRecord = { ...base, id: randomUUID(), recorderSteamId: me };
+		expect(await persistMatch(t.db, recorded)).toBe('saved');
+
+		// The same game imported from its demo: another id, and it starts a minute earlier.
+		const shift = (iso: string, ms: number) => new Date(Date.parse(iso) + ms).toISOString();
+		const imported: MatchRecord = {
+			...recorded,
+			id: randomUUID(),
+			origin: 'demo',
+			startedAt: shift(recorded.startedAt, -60_000),
+			endedAt: shift(recorded.endedAt, -60_000)
+		};
+		expect(await persistMatch(t.db, imported)).toBe('duplicate');
+
+		// A game from the day before is saved, and importing it again updates the same row.
+		const older: MatchRecord = {
+			...imported,
+			startedAt: shift(recorded.startedAt, -86_400_000),
+			endedAt: shift(recorded.endedAt, -86_400_000)
+		};
+		expect(await persistMatch(t.db, older)).toBe('saved');
+		expect(await persistMatch(t.db, older)).toBe('saved');
+
+		const rows = await t.db.execute<{ id: string; origin: string }>(
+			sql`select id, origin from matches where recorder_steam_id = ${me} order by started_at`
+		);
+		expect(rows.map((r) => [r.id, r.origin])).toEqual([
+			[older.id, 'demo'],
+			[recorded.id, 'gsi']
+		]);
+		expect((await matchDetail(t.db, older.id))?.match.origin).toBe('demo');
+	});
 });

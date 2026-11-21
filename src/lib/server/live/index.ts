@@ -32,12 +32,12 @@ function create(): LiveRuntime {
 		appVersion: config.appVersion
 	});
 	rt.sink = createOutbox(config.dataDir, settings, () => rt.broadcast());
-	rt.demos = createDemoFetcher(
-		config.dataDir,
-		rt.sink,
-		() => settings.get().demoDamage,
-		() => rt.broadcast()
-	);
+	rt.demos = createDemoFetcher(config.dataDir, rt.sink, {
+		enabled: () => settings.get().demoDamage,
+		steamId: () => settings.get().steamId,
+		appVersion: config.appVersion,
+		onChange: () => rt.broadcast()
+	});
 	setInterval(() => rt.tick(Date.now()), TICK_MS).unref();
 	if (!config.gsiToken) {
 		console.warn('[live] GSI_TOKEN is not set; run `yarn gsi:config` and restart.');

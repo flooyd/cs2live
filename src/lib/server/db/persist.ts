@@ -1,7 +1,7 @@
 // Saves a MatchRecord. Idempotent: upserts the match by id and replaces its rounds, kill
 // events and sightings, so a duplicate gameover or a re-sent upload never creates a second
 // match. No framework imports (the seed script uses it too).
-import { and, eq, gte, lte, ne, sql } from 'drizzle-orm';
+import { and, eq, gt, gte, lt, lte, ne, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { killEvents, matches, players, rounds, sightings } from './schema.ts';
 import type { MatchRecord } from '#lib/match-record.ts';
@@ -27,22 +27,43 @@ export function withUnknownDamage(record: MatchRecord): MatchRecord {
 	};
 }
 
+/**
+ * Saves the match. Returns 'duplicate', without writing, for a match imported from a demo that
+ * the same player already has as a live recording (or an import with another id): same map, and
+ * the two overlap in time.
+ */
 export async function persistMatch(
 	db: Db,
 	input: MatchRecord,
 	source: 'direct' | 'upload' = 'direct'
-) {
+): Promise<'saved' | 'duplicate'> {
 	const record = withUnknownDamage(input);
 	const startedAt = new Date(record.startedAt);
 	const endedAt = new Date(record.endedAt);
+	const origin = record.origin ?? 'gsi';
 
-	await db.transaction(async (tx) => {
+	return db.transaction(async (tx) => {
 		const existing = await tx
 			.select({ recorder: matches.recorderSteamId })
 			.from(matches)
 			.where(eq(matches.id, record.id));
 		if (existing[0] && existing[0].recorder !== record.recorderSteamId) {
 			throw new RecorderMismatchError('This match id belongs to another player.');
+		}
+		if (origin === 'demo' && !existing[0]) {
+			const same = await tx
+				.select({ id: matches.id })
+				.from(matches)
+				.where(
+					and(
+						eq(matches.recorderSteamId, record.recorderSteamId),
+						eq(matches.map, record.map),
+						lt(matches.startedAt, endedAt),
+						gt(matches.endedAt, startedAt)
+					)
+				)
+				.limit(1);
+			if (same.length) return 'duplicate';
 		}
 
 		const people = new Map<string, string | null>([[record.recorderSteamId, record.recorderName]]);
@@ -107,7 +128,8 @@ export async function persistMatch(
 			roundWins: record.roundWins,
 			gsiVersion: record.gsiVersion,
 			appVersion: record.appVersion,
-			source
+			source,
+			origin
 		};
 		const { id: _id, ...update } = values;
 		await tx
@@ -182,6 +204,7 @@ export async function persistMatch(
 				}))
 			);
 		}
+		return 'saved';
 	});
 }
 

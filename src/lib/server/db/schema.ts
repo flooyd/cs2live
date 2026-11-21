@@ -78,6 +78,8 @@ export const matches = pgTable(
 		appVersion: text('app_version'),
 		/** direct (written by a local copy with DATABASE_URL) or upload (through /api/upload). */
 		source: text('source').notNull(),
+		/** gsi (recorded live while playing) or demo (imported afterwards from the match demo). */
+		origin: text('origin').$type<'gsi' | 'demo'>().notNull().default('gsi'),
 		createdAt: tstz('created_at').notNull().defaultNow(),
 		updatedAt: tstz('updated_at').notNull().defaultNow()
 	},

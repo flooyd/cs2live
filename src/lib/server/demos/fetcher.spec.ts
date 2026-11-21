@@ -9,6 +9,8 @@ import { DemoFetcher, type DemoDeps } from './fetcher.ts';
 import type { GcMatch, GcMatchList } from './gc-match-list.ts';
 import { accountIdOf } from './match-demo.ts';
 import { DemoError } from './steam.ts';
+import { demoRecordId } from './demo-record.ts';
+import { syntheticDemo } from './testing.ts';
 
 const ME = fakeSteamId(100);
 const real = runFrames(loadFixture('real/wingman-inferno'), { steamId: ME }).records[0];
@@ -31,7 +33,10 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-function setup(over: Partial<DemoDeps> = {}, opts: { now?: number; enabled?: boolean } = {}) {
+function setup(
+	over: Partial<DemoDeps> = {},
+	opts: { now?: number; enabled?: boolean; steamId?: string | null } = {}
+) {
 	const sent: MatchRecord[] = [];
 	const list: GcMatchList = { accountId: accountIdOf(ME), matches: [listed] };
 	const deps: DemoDeps = {
@@ -40,6 +45,7 @@ function setup(over: Partial<DemoDeps> = {}, opts: { now?: number; enabled?: boo
 		recentMatches: vi.fn(() => Promise.resolve(list)),
 		obtainDemo: vi.fn(() => Promise.resolve({ path: 'demo.dem', temporary: false })),
 		parseDemo: vi.fn(() => ({ map: real.map, present: true, rounds: 14, damage: fullDamage() })),
+		readDemoMatch: vi.fn(() => syntheticDemo(ME)),
 		...over
 	};
 	let now = opts.now ?? ended + 10 * 60_000;
@@ -48,6 +54,8 @@ function setup(over: Partial<DemoDeps> = {}, opts: { now?: number; enabled?: boo
 		deps,
 		sink: { enqueue: (r) => sent.push(r) },
 		enabled: () => opts.enabled ?? true,
+		steamId: () => (opts.steamId === undefined ? ME : opts.steamId),
+		appVersion: 'test',
 		now: () => now
 	});
 	return { fetcher, deps, sent, advance: (ms: number) => (now += ms), at: () => now };
@@ -166,6 +174,85 @@ describe('DemoFetcher', () => {
 		expect(deps.recentMatches).toHaveBeenCalledTimes(3);
 		await fetcher.run({ retry: true });
 		expect(deps.recentMatches).toHaveBeenCalledTimes(4);
+	});
+
+	it('imports listed matches CS2Live never recorded, once', async () => {
+		const unrecorded: GcMatch = {
+			...listed,
+			matchId: '43',
+			matchTime: listed.matchTime - 4 * HOUR
+		};
+		const notMine: GcMatch = { ...listed, matchId: '44', accountIds: [7] };
+		const { fetcher, deps, sent } = setup({
+			recentMatches: vi.fn(() =>
+				Promise.resolve({ accountId: accountIdOf(ME), matches: [listed, unrecorded, notMine] })
+			)
+		});
+		// The listed match whose recording is waiting for damage is not imported again.
+		fetcher.remember(real);
+		await fetcher.importRecent();
+		expect(deps.obtainDemo).toHaveBeenCalledTimes(1);
+		expect(deps.obtainDemo).toHaveBeenCalledWith(unrecorded, dir);
+		expect(sent).toHaveLength(1);
+		expect(sent[0]).toMatchObject({
+			id: demoRecordId('43', ME),
+			origin: 'demo',
+			appVersion: 'test',
+			recorderSteamId: ME
+		});
+		const view = fetcher.view();
+		expect(view.message).toBe('Imported 1 match.');
+		expect(view.jobs.find((j) => j.matchId === sent[0].id)).toMatchObject({
+			status: 'done',
+			imported: true
+		});
+
+		// A restart remembers it; a second import finds nothing new.
+		const again = setup({ recentMatches: deps.recentMatches });
+		await again.fetcher.importRecent();
+		expect(again.deps.obtainDemo).not.toHaveBeenCalled();
+		expect(again.sent).toEqual([]);
+		expect(again.fetcher.view().message).toBe(
+			'Nothing new: CS2Live already has all 3 matches Steam lists.'
+		);
+	});
+
+	it('imports only with CS2 closed, a Steam ID, and the right account', async () => {
+		const running = setup({ isCs2Running: vi.fn(() => Promise.resolve(true)) });
+		await running.fetcher.importRecent();
+		expect(running.fetcher.view().state).toBe('waiting-for-cs2');
+		expect(running.deps.recentMatches).not.toHaveBeenCalled();
+
+		const noId = setup({}, { steamId: null });
+		await noId.fetcher.importRecent();
+		expect(noId.fetcher.view().message).toMatch(/Steam ID/);
+
+		const other = setup({
+			recentMatches: vi.fn(() => Promise.resolve({ accountId: 1, matches: [listed] }))
+		});
+		await other.fetcher.importRecent();
+		expect(other.fetcher.view()).toMatchObject({ state: 'error' });
+		expect(other.deps.obtainDemo).not.toHaveBeenCalled();
+	});
+
+	it('reports a demo it could not import and carries on', async () => {
+		const second: GcMatch = { ...listed, matchId: '43', matchTime: listed.matchTime + HOUR };
+		let calls = 0;
+		const { fetcher, sent } = setup({
+			recentMatches: vi.fn(() =>
+				Promise.resolve({ accountId: accountIdOf(ME), matches: [listed, second] })
+			),
+			obtainDemo: vi.fn(() =>
+				++calls === 1
+					? Promise.reject(new DemoError('no-demo', 'Valve no longer has this demo.'))
+					: Promise.resolve({ path: 'demo.dem', temporary: false })
+			)
+		});
+		await fetcher.importRecent();
+		expect(sent).toHaveLength(1);
+		expect(fetcher.view().message).toBe(
+			'Imported 1 match. 1 could not be imported: Valve no longer has this demo.'
+		);
 	});
 
 	it('skips matches from another Steam account and deletes downloaded demos', async () => {
