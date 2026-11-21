@@ -55,6 +55,29 @@ describe('outbox', () => {
 		expect(box.status()).toMatchObject({ pending: 0, lastSyncedMatchId: ID1, lastError: null });
 	});
 
+	it('also sends matches queued while it is sending', async () => {
+		const sent: string[] = [];
+		let release!: () => void;
+		const firstSend = new Promise<void>((r) => (release = r));
+		const box = new Outbox(dir, () => ({
+			mode: 'upload',
+			label: 'test',
+			send: async (r) => {
+				if (r.id === ID1) await firstSend;
+				sent.push(r.id);
+			}
+		}));
+		box.enqueue(record(ID1));
+		await new Promise((r) => setTimeout(r, 20)); // ID1 is being sent
+		box.enqueue(record(ID2));
+		await new Promise((r) => setTimeout(r, 20)); // ID2 queued; its flush joins the same pass
+		release();
+		// No flush() here: nothing else will start a pass in the running app either.
+		await new Promise((r) => setTimeout(r, 50));
+		expect(sent).toEqual([ID1, ID2]);
+		expect(files()).toEqual([]);
+	});
+
 	it('re-sending the same match id replaces the queued copy', async () => {
 		const box = new Outbox(dir, () => null);
 		box.enqueue(record(ID1));

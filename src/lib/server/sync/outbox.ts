@@ -106,7 +106,13 @@ export class Outbox implements MatchSink {
 			return;
 		}
 		let failed = false;
-		for (const id of [...this.pending]) {
+		// Matches queued while this pass runs are sent by it too: flush() calls made meanwhile
+		// share this pass, so nothing else would pick them up.
+		const tried = new Set<string>();
+		for (;;) {
+			const id = [...this.pending].find((p) => !tried.has(p));
+			if (id === undefined) break;
+			tried.add(id);
 			const file = join(this.dir, `${id}.json`);
 			try {
 				const record = JSON.parse(await readFile(file, 'utf8')) as MatchRecord;
