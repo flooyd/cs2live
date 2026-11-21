@@ -45,5 +45,14 @@ a throwaway database.
   changes are safe to run first; for removals, deploy code that no longer uses the column, then
   drop it in a later migration.
 - Neon requires SSL; keep `?sslmode=require` in the URLs.
+- **Production history.** Production was first created with `db:push`, so it had no
+  `drizzle.__drizzle_migrations`. On 2026-11-20 it was baselined (one row for `0000_init`:
+  sha256 of the SQL file, `created_at` = its journal `when`) and then migrated normally, so
+  `yarn db:migrate` works there now. A database created with push needs the same baseline
+  first, or `migrate` tries to create every table again. Check with
+  `select * from drizzle.__drizzle_migrations`.
+- The local `.env` may only have the pooled `DATABASE_URL`. For migrations, set
+  `DATABASE_URL_UNPOOLED` to the same URL without `-pooler` in the host (a shell variable
+  wins over `.env`).
 - Uploads from friends' older CS2Live versions keep arriving after a deploy: the upload API
   must keep accepting their payloads.
