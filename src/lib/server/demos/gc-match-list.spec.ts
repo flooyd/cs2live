@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeMatchInfo, decodeMatchList, ProtobufError } from './gc-match-list.ts';
+import { cs2DemoName, decodeMatchInfo, decodeMatchList, ProtobufError } from './gc-match-list.ts';
 
 // A minimal protobuf encoder, enough to build the Game Coordinator's messages.
 const varint = (value: bigint | number): number[] => {
@@ -53,23 +53,19 @@ const matchInfo = (id: bigint, time: number, rounds: number[][], legacy?: number
 
 describe('decodeMatchList', () => {
 	it('reads matches, players, scores and the demo address from the last round', () => {
+		const first = matchInfo(3_800_000_000_000_000_001n, 1_795_000_000, [
+			roundStats({ accounts: [11, 22, 0, 0, 0, 33, 4_294_900_100] }),
+			roundStats({ url: URL_A, scores: [9, 7] })
+		]);
+		const second = matchInfo(3_800_000_000_000_000_002n, 1_795_003_600, [
+			roundStats({ accounts: [44, 4_294_900_100], packed: true, scores: [13, 11] })
+		]);
 		const bytes = new Uint8Array([
 			...int(1, 1),
 			...int(2, 4_294_900_100),
 			...int(3, 1_795_000_000),
-			...msg(
-				4,
-				matchInfo(3_800_000_000_000_000_001n, 1_795_000_000, [
-					roundStats({ accounts: [11, 22, 0, 0, 0, 33, 4_294_900_100] }),
-					roundStats({ url: URL_A, scores: [9, 7] })
-				])
-			),
-			...msg(
-				4,
-				matchInfo(3_800_000_000_000_000_002n, 1_795_003_600, [
-					roundStats({ accounts: [44, 4_294_900_100], packed: true, scores: [13, 11] })
-				])
-			)
+			...msg(4, first),
+			...msg(4, second)
 		]);
 		const list = decodeMatchList(bytes);
 		expect(list.accountId).toBe(4_294_900_100);
@@ -80,7 +76,9 @@ describe('decodeMatchList', () => {
 				accountIds: [11, 22, 33, 4_294_900_100],
 				teamScores: [9, 7],
 				demoUrl: URL_A,
-				durationS: 733
+				durationS: 733,
+				// Kept as it came, to save next to the demo like CS2 does.
+				info: new Uint8Array(first)
 			},
 			{
 				matchId: '3800000000000000002',
@@ -88,7 +86,8 @@ describe('decodeMatchList', () => {
 				accountIds: [44, 4_294_900_100],
 				teamScores: [13, 11],
 				demoUrl: null,
-				durationS: 733
+				durationS: 733,
+				info: new Uint8Array(second)
 			}
 		]);
 	});
@@ -117,6 +116,15 @@ describe('decodeMatchList', () => {
 			new Uint8Array(matchInfo(1n, 1, [roundStats({ scores: [-1, 3] })]))
 		);
 		expect(info.teamScores).toEqual([-1, 3]);
+	});
+
+	it('names a demo the way CS2 names its own downloads', () => {
+		expect(cs2DemoName(URL_A)).toBe('match730_003800000000000000001_0123456789_404');
+		expect(cs2DemoName('http://replay129.valve.net/730/0038_0122.dem')).toBe(
+			'match730_0038_0122_129'
+		);
+		expect(cs2DemoName('http://replay1.valve.net/730/42.dem.bz2')).toBeNull();
+		expect(cs2DemoName('not a url')).toBeNull();
 	});
 
 	it('handles an empty list and rejects malformed input', () => {

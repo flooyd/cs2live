@@ -107,7 +107,7 @@ export const actions: Actions = {
 			return { demosImporting: true };
 		}
 		if (form.get('intent') === 'check') {
-			// Can take a minute (Steam, then a 25 MB download); the page shows the result on reload.
+			// Can take a minute (Steam, then a download per missing demo); the page shows the result on reload.
 			void rt.demos.run({ retry: true });
 			return { demosChecking: true };
 		}

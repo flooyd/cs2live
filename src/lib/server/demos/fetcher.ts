@@ -4,21 +4,31 @@
 // Competitive or Wingman match ends without damage, it is kept here as a job. Once CS2 is closed
 // (the Steam helper only works then), we ask Steam for the recent match list, find the match,
 // take the demo from CS2's replays folder or download it, read your damage per round and send the
-// match again through the outbox with the damage filled in. Downloaded demos are deleted after.
+// match again through the outbox with the damage filled in.
+//
+// Demos are kept for watching in CS2 (demo-file.ts saves them where CS2 keeps its own). Every time
+// it asks Steam, it also saves the demo of each listed match you played that isn't on this PC yet.
 //
 // It can also import matches CS2Live never recorded (importRecent): every official match in
 // Steam's recent list that no job covers is built entirely from its demo (demo-record.ts) and
 // kept as a finished job, so it isn't imported twice.
 //
 // Jobs live in CS2LIVE_DATA_DIR/demos/jobs/<match id>.json. Node-only, no framework imports.
-import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
+import {
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	renameSync,
+	rmSync,
+	writeFileSync
+} from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { MatchRecord } from '#lib/match-record.ts';
 import type { GcMatch, GcMatchList } from './gc-match-list.ts';
 import { accountIdOf, findGcMatch, wantsDemoDamage, withDemoDamage } from './match-demo.ts';
 import { DemoError } from './steam.ts';
-import type { DemoOnDisk, ParsedDemo } from './demo-file.ts';
+import type { DemoOnDisk, ParsedDemo, SavedDemos } from './demo-file.ts';
 import { demoRecordId, matchFromDemo, type DemoMatchData } from './demo-record.ts';
 
 export type DemoJobStatus = 'waiting' | 'done' | 'no-demo' | 'failed';
@@ -30,6 +40,8 @@ export interface DemoJob {
 	attempts: number;
 	message: string | null;
 	updatedAt: number;
+	/** The match's demo on this PC, kept for watching. Missing in jobs from before demos were kept. */
+	demo?: string | null;
 }
 
 /** The outside world, swappable in tests. */
@@ -37,9 +49,19 @@ export interface DemoDeps {
 	available: () => boolean;
 	isCs2Running: () => Promise<boolean | null>;
 	recentMatches: (workDir: string) => Promise<GcMatchList>;
-	obtainDemo: (match: GcMatch, workDir: string) => Promise<DemoOnDisk>;
+	/** Finds or downloads a demo; `ownDir` is where it goes when CS2's replays folder can't be used. */
+	obtainDemo: (match: GcMatch, ownDir: string) => Promise<DemoOnDisk>;
 	parseDemo: (path: string, steamId: string) => ParsedDemo;
 	readDemoMatch: (path: string, steamId: string) => DemoMatchData;
+	savedDemos: (ownDir: string) => SavedDemos;
+	/** The CS2 console command that plays a demo, or null when CS2 can't reach it. */
+	playdemo: (path: string) => string | null;
+}
+
+/** A match demo on this PC, and how to watch it. */
+export interface SavedDemo {
+	file: string;
+	playdemo: string | null;
 }
 
 export interface DemoView {
@@ -49,6 +71,8 @@ export interface DemoView {
 	state: 'idle' | 'waiting-for-cs2' | 'working' | 'error';
 	message: string | null;
 	lastRunAt: number | null;
+	/** Demos on this PC. */
+	saved: SavedDemos;
 	jobs: {
 		matchId: string;
 		map: string;
@@ -59,6 +83,7 @@ export interface DemoView {
 		adr: number | null;
 		/** Built from the demo, not recorded live. */
 		imported: boolean;
+		demo: SavedDemo | null;
 	}[];
 }
 
@@ -87,12 +112,14 @@ const NOT_LISTED_MS = 3 * 3600_000;
 /** Valve has the demo a few minutes after the match; after a day, it isn't coming. */
 const NO_DEMO_MS = 24 * 3600_000;
 const MAX_ATTEMPTS = 3;
-/** Jobs (and demos, at Valve) are kept about this long. */
+/** Jobs are kept this long, or for as long as their demo is on this PC. */
 const KEEP_MS = 30 * 24 * 3600_000;
 
 export class DemoFetcher {
 	private dir: string;
 	private jobsDir: string;
+	/** Where demos go when CS2's replays folder can't be used. */
+	private filesDir: string;
 	private deps: DemoDeps;
 	private sink: DemoFetcherOptions['sink'];
 	private enabled: () => boolean;
@@ -111,6 +138,7 @@ export class DemoFetcher {
 		// CS2LIVE_DATA_DIR is relative by default; tools we start run in other folders.
 		this.dir = resolve(opts.dir);
 		this.jobsDir = join(opts.dir, 'jobs');
+		this.filesDir = join(this.dir, 'files');
 		this.deps = opts.deps;
 		this.sink = opts.sink;
 		this.enabled = opts.enabled;
@@ -132,7 +160,9 @@ export class DemoFetcher {
 			const file = join(this.jobsDir, name);
 			try {
 				const job = JSON.parse(readFileSync(file, 'utf8')) as DemoJob;
-				if (this.now() - Date.parse(job.record.endedAt) > KEEP_MS) rmSync(file, { force: true });
+				const old = this.now() - Date.parse(job.record.endedAt) > KEEP_MS;
+				// A job whose demo is still here stays: it is how the match finds its demo.
+				if (old && !this.demoOf(job)) rmSync(file, { force: true });
 				else this.jobs.set(job.record.id, job);
 			} catch (err) {
 				console.error(`[demos] could not read ${file}:`, err);
@@ -150,6 +180,11 @@ export class DemoFetcher {
 		} catch (err) {
 			console.error('[demos] could not save a job:', err);
 		}
+	}
+
+	/** The job's demo, if it is still on this PC. */
+	private demoOf(job: DemoJob): string | null {
+		return job.demo && existsSync(job.demo) ? job.demo : null;
 	}
 
 	private waiting(): DemoJob[] {
@@ -248,7 +283,8 @@ export class DemoFetcher {
 			}
 		}
 		const waiting = this.waiting();
-		if (!waiting.length) {
+		// Asked for (retry), it goes to Steam even with nothing waiting, to save missing demos.
+		if (!waiting.length && !retry) {
 			this.setState('idle', null);
 			return;
 		}
@@ -256,23 +292,81 @@ export class DemoFetcher {
 		if (!list) return;
 
 		let done = 0;
+		const tried = new Set<string>();
 		for (const job of waiting) {
-			await this.process(job, list);
+			await this.process(job, list, tried);
 			if (job.status === 'done') done++;
 			this.save(job);
 			this.onChange();
 		}
+		const kept = await this.keepDemos(list, tried);
 
 		const left = this.waiting().length;
 		this.nextAttemptAt = left ? this.now() + RETRY_MS : 0;
 		const parts = [
 			done ? `Added damage to ${done} match${done === 1 ? '' : 'es'}.` : null,
+			...kept,
 			left ? `${left} still waiting; trying again in ${RETRY_MS / 60_000} minutes.` : null
 		].filter(Boolean);
 		this.setState('idle', parts.join(' ') || null);
 	}
 
-	private async process(job: DemoJob, list: GcMatchList) {
+	/** The job for a listed match: its import, or the recording it matches. */
+	private jobFor(match: GcMatch, list: GcMatch[]): DemoJob | undefined {
+		for (const job of this.jobs.values()) {
+			const r = job.record;
+			const found =
+				r.origin === 'demo'
+					? r.id === demoRecordId(match.matchId, r.recorderSteamId)
+					: findGcMatch(r, list)?.matchId === match.matchId;
+			if (found) return job;
+		}
+		return undefined;
+	}
+
+	/**
+	 * Saves the demos of listed matches you played that aren't on this PC yet (`tried` were just
+	 * handled) and notes them on their jobs. Returns what to tell you.
+	 */
+	private async keepDemos(list: GcMatchList, tried: Set<string>): Promise<string[]> {
+		const steamId = this.steamId();
+		if (!steamId) return [];
+		const me = accountIdOf(steamId);
+		if (list.accountId !== null && list.accountId !== me) return [];
+		const todo = list.matches
+			.filter((m) => m.accountIds.includes(me) && !tried.has(m.matchId))
+			.map((match) => ({ match, job: this.jobFor(match, list.matches) }))
+			.filter(({ job }) => !job || !this.demoOf(job));
+
+		let saved = 0;
+		const problems: string[] = [];
+		for (const [i, { match, job }] of todo.entries()) {
+			this.setState('working', `Saving match demos (${i + 1} of ${todo.length})…`);
+			try {
+				const demo = await this.deps.obtainDemo(match, this.filesDir);
+				if (demo.downloaded) saved++;
+				if (job) {
+					job.demo = demo.path;
+					this.save(job);
+				}
+			} catch (err) {
+				const e = err instanceof DemoError ? err : new DemoError('failed', String(err));
+				console.log(`[demos] saving the demo of ${match.matchId}: ${e.message}`);
+				// Valve deletes demos after a while; nothing to tell you about those.
+				if (e.kind !== 'no-demo') problems.push(e.message);
+			}
+		}
+		if (todo.length) this.onChange();
+		const n = problems.length;
+		return [
+			saved ? `Saved ${saved} demo${saved === 1 ? '' : 's'}.` : null,
+			n
+				? `${n} demo${n === 1 ? '' : 's'} could not be saved: ${[...new Set(problems)].join(' ')}`
+				: null
+		].filter((p): p is string => p !== null);
+	}
+
+	private async process(job: DemoJob, list: GcMatchList, tried: Set<string>) {
 		const record = job.record;
 		const age = this.now() - Date.parse(record.endedAt);
 		if (list.accountId !== null && list.accountId !== accountIdOf(record.recorderSteamId)) {
@@ -291,9 +385,10 @@ export class DemoFetcher {
 			return;
 		}
 
-		let demo: DemoOnDisk | null = null;
+		tried.add(match.matchId);
 		try {
-			demo = await this.deps.obtainDemo(match, this.dir);
+			const demo = await this.deps.obtainDemo(match, this.filesDir);
+			job.demo = demo.path;
 			const parsed = this.deps.parseDemo(demo.path, record.recorderSteamId);
 			if (!parsed.present) throw new DemoError('failed', "You aren't in this match's demo.");
 			if (parsed.map && parsed.map !== record.map) {
@@ -315,8 +410,6 @@ export class DemoFetcher {
 				else job.message = e.message;
 			} else if (++job.attempts >= MAX_ATTEMPTS) this.finish(job, 'failed', e.message);
 			else job.message = e.message;
-		} finally {
-			if (demo?.temporary) await rm(demo.path, { force: true }).catch(() => {});
 		}
 	}
 
@@ -350,11 +443,12 @@ export class DemoFetcher {
 
 		let imported = 0;
 		const problems: string[] = [];
+		const tried = new Set<string>();
 		for (const [i, match] of fresh.entries()) {
 			this.setState('working', `Importing match ${i + 1} of ${fresh.length} from its demo…`);
-			let demo: DemoOnDisk | null = null;
+			tried.add(match.matchId);
 			try {
-				demo = await this.deps.obtainDemo(match, this.dir);
+				const demo = await this.deps.obtainDemo(match, this.filesDir);
 				const data = this.deps.readDemoMatch(demo.path, steamId);
 				const record = matchFromDemo(data, {
 					steamId,
@@ -369,7 +463,8 @@ export class DemoFetcher {
 					status: 'done',
 					attempts: 0,
 					message: 'Imported from the match demo.',
-					updatedAt: 0
+					updatedAt: 0,
+					demo: demo.path
 				};
 				this.jobs.set(record.id, job);
 				this.save(job);
@@ -379,11 +474,10 @@ export class DemoFetcher {
 				const e = err instanceof DemoError ? err : new DemoError('failed', String(err));
 				console.log(`[demos] import of ${match.matchId}: ${e.message}`);
 				problems.push(e.message);
-			} finally {
-				if (demo?.temporary) await rm(demo.path, { force: true }).catch(() => {});
 			}
 			this.onChange();
 		}
+		const kept = await this.keepDemos(list, tried);
 
 		const parts: string[] = [];
 		if (imported) parts.push(`Imported ${imported} match${imported === 1 ? '' : 'es'}.`);
@@ -395,6 +489,7 @@ export class DemoFetcher {
 		if (problems.length) {
 			parts.push(`${problems.length} could not be imported: ${[...new Set(problems)].join(' ')}`);
 		}
+		parts.push(...kept);
 		this.setState(problems.length && !imported ? 'error' : 'idle', parts.join(' '));
 	}
 
@@ -415,7 +510,8 @@ export class DemoFetcher {
 				status: j.status,
 				message: j.message,
 				adr: j.record.adr,
-				imported: j.record.origin === 'demo'
+				imported: j.record.origin === 'demo',
+				demo: this.saved(j)
 			}));
 		return {
 			enabled: this.enabled(),
@@ -423,7 +519,19 @@ export class DemoFetcher {
 			state: this.state,
 			message: this.message,
 			lastRunAt: this.lastRunAt,
+			saved: this.deps.savedDemos(this.filesDir),
 			jobs
 		};
+	}
+
+	private saved(job: DemoJob): SavedDemo | null {
+		const file = this.demoOf(job);
+		return file ? { file, playdemo: this.deps.playdemo(file) } : null;
+	}
+
+	/** The demo of a match CS2Live has (by its id), if it is on this PC. */
+	demoFor(matchId: string): SavedDemo | null {
+		const job = this.jobs.get(matchId);
+		return job ? this.saved(job) : null;
 	}
 }

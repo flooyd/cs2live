@@ -21,6 +21,8 @@ export interface GcMatch {
 	/** Where Valve serves the demo (`http://replayNNN.valve.net/730/….dem.bz2`); null when gone. */
 	demoUrl: string | null;
 	durationS: number | null;
+	/** The encoded MatchInfo, which is what CS2 saves next to a demo as `.dem.info`. */
+	info?: Uint8Array;
 }
 
 export interface GcMatchList {
@@ -144,7 +146,8 @@ function decodeMatch(b: Uint8Array): GcMatch {
 		accountIds,
 		teamScores: last ? ints(last, 12).map(int32) : [],
 		demoUrl,
-		durationS: duration === null ? null : int32(duration)
+		durationS: duration === null ? null : int32(duration),
+		info: b
 	};
 }
 
@@ -161,4 +164,22 @@ export function decodeMatchList(b: Uint8Array): GcMatchList {
 /** CDataGCCStrike15_v2_MatchInfo (a `.dem.info` file). Throws ProtobufError when malformed. */
 export function decodeMatchInfo(b: Uint8Array): GcMatch {
 	return decodeMatch(b);
+}
+
+/**
+ * The name (without `.dem`) CS2 gives a match's demo in its replays folder,
+ * `match730_<reservation id>_<tv port>_<replay server>`: Valve's demo address
+ * `http://replay<server>.valve.net/730/<reservation id>_<tv port>.dem.bz2` rearranged. Null for an
+ * address of another shape. Checked against CS2's own downloads (Nov 2026).
+ */
+export function cs2DemoName(demoUrl: string): string | null {
+	let url: URL;
+	try {
+		url = new URL(demoUrl);
+	} catch {
+		return null;
+	}
+	const server = /^replay(\d+)\./i.exec(url.hostname)?.[1];
+	const file = /\/(\d+_\d+)\.dem(?:\.bz2)?$/i.exec(url.pathname)?.[1];
+	return server && file ? `match730_${file}_${server}` : null;
 }

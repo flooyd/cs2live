@@ -2,6 +2,7 @@ import { error } from '@sveltejs/kit';
 import { z } from 'zod';
 import type { PageServerLoad } from './$types';
 import { getDb } from '#lib/server/db/index.ts';
+import { getRuntime } from '#lib/server/live/index.ts';
 import { matchDetail } from '#lib/server/db/stats/matches.ts';
 import { buildRoundPips } from '#lib/round-pips.ts';
 import { asSide, type Side } from '#lib/cs2/rounds.ts';
@@ -23,6 +24,8 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 	return {
 		remote: false as const,
 		...detail,
+		// The match's demo, when this is the PC that played it and CS2Live kept the demo.
+		demo: getRuntime()?.demos?.demoFor(params.id) ?? null,
 		pips: buildRoundPips(detail.match.mode, detail.match.roundWins, sides),
 		regulationRounds: info.regulationRounds,
 		halfLength: info.halfLength

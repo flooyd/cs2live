@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
 	import RemoteNote from '#lib/components/RemoteNote.svelte';
+	import CopyButton from '#lib/components/CopyButton.svelte';
 	import RoundStrip from '#lib/live/components/RoundStrip.svelte';
 	import ColumnChart, { type Column } from '#lib/components/charts/ColumnChart.svelte';
 	import LineChart from '#lib/components/charts/LineChart.svelte';
@@ -96,6 +97,20 @@
 					</span>
 				{/if}
 			</div>
+			{#if data.demo}
+				<p class="demo small">
+					{#if data.demo.playdemo}
+						<span class="muted">
+							The demo is on this PC. To watch it, run this in CS2's console:
+						</span>
+						<code>{data.demo.playdemo}</code>
+						<CopyButton text={data.demo.playdemo} />
+					{:else}
+						<span class="muted">The demo is on this PC:</span>
+						<code>{data.demo.file}</code>
+					{/if}
+				</p>
+			{/if}
 		</div>
 		<div class="score">
 			<span class="res {m.result}">{resultLabel(m.result)}</span>
@@ -387,6 +402,15 @@
 	}
 	p.small {
 		margin: 0.6rem 0 0;
+	}
+	.demo {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.3rem 0.5rem;
+	}
+	.demo code {
+		overflow-wrap: anywhere;
 	}
 	.score {
 		display: grid;

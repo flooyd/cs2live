@@ -1,6 +1,6 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative as relativePath } from 'node:path';
+import { basename, join, relative as relativePath } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadFixture, runFrames } from '../gsi/testing.ts';
 import { fakeSteamId } from '#lib/cs2/steamid.ts';
@@ -43,9 +43,15 @@ function setup(
 		available: () => true,
 		isCs2Running: vi.fn(() => Promise.resolve(false)),
 		recentMatches: vi.fn(() => Promise.resolve(list)),
-		obtainDemo: vi.fn(() => Promise.resolve({ path: 'demo.dem', temporary: false })),
+		obtainDemo: vi.fn(() => {
+			const file = join(dir, 'demo.dem');
+			writeFileSync(file, 'demo');
+			return Promise.resolve({ path: file, downloaded: false });
+		}),
 		parseDemo: vi.fn(() => ({ map: real.map, present: true, rounds: 14, damage: fullDamage() })),
 		readDemoMatch: vi.fn(() => syntheticDemo(ME)),
+		savedDemos: (ownDir) => ({ dir: ownDir, count: 0, bytes: 0 }),
+		playdemo: (path) => `playdemo ${basename(path, '.dem')}`,
 		...over
 	};
 	let now = opts.now ?? ended + 10 * 60_000;
@@ -85,9 +91,12 @@ describe('DemoFetcher', () => {
 		expect(record.damageSource).toBe('demo');
 		expect(record.damage).toBe(60 * real.rounds.length);
 		expect(record.adr).toBe(60);
-		expect(deps.obtainDemo).toHaveBeenCalledWith(listed, dir);
+		expect(deps.obtainDemo).toHaveBeenCalledWith(listed, join(dir, 'files'));
 		await vi.waitFor(() => expect(fetcher.view().jobs[0].status).toBe('done'));
-		expect(fetcher.view()).toMatchObject({ state: 'idle', jobs: [{ adr: 60 }] });
+		expect(fetcher.view()).toMatchObject({
+			state: 'idle',
+			jobs: [{ adr: 60, demo: { file: join(dir, 'demo.dem'), playdemo: 'playdemo demo' } }]
+		});
 	});
 
 	it('does not run while the CS2 process is up, or when turned off', async () => {
@@ -191,8 +200,12 @@ describe('DemoFetcher', () => {
 		// The listed match whose recording is waiting for damage is not imported again.
 		fetcher.remember(real);
 		await fetcher.importRecent();
-		expect(deps.obtainDemo).toHaveBeenCalledTimes(1);
-		expect(deps.obtainDemo).toHaveBeenCalledWith(unrecorded, dir);
+		// Its demo is saved, though, like every listed match you played. Not the other player's.
+		expect(vi.mocked(deps.obtainDemo).mock.calls).toEqual([
+			[unrecorded, join(dir, 'files')],
+			[listed, join(dir, 'files')]
+		]);
+		expect(fetcher.demoFor(real.id)?.file).toBe(join(dir, 'demo.dem'));
 		expect(sent).toHaveLength(1);
 		expect(sent[0]).toMatchObject({
 			id: demoRecordId('43', ME),
@@ -245,7 +258,7 @@ describe('DemoFetcher', () => {
 			obtainDemo: vi.fn(() =>
 				++calls === 1
 					? Promise.reject(new DemoError('no-demo', 'Valve no longer has this demo.'))
-					: Promise.resolve({ path: 'demo.dem', temporary: false })
+					: Promise.resolve({ path: 'demo.dem', downloaded: true })
 			)
 		});
 		await fetcher.importRecent();
@@ -255,7 +268,7 @@ describe('DemoFetcher', () => {
 		);
 	});
 
-	it('skips matches from another Steam account and deletes downloaded demos', async () => {
+	it('skips matches from another Steam account', async () => {
 		const other = setup({
 			recentMatches: vi.fn(() => Promise.resolve({ accountId: 1, matches: [listed] }))
 		});
@@ -263,16 +276,58 @@ describe('DemoFetcher', () => {
 		await other.fetcher.run();
 		expect(other.fetcher.view().jobs[0].message).toMatch(/different account/);
 		expect(other.deps.obtainDemo).not.toHaveBeenCalled();
+	});
 
-		rmSync(join(dir, 'jobs'), { recursive: true });
-		const file = join(dir, '42.dem');
-		writeFileSync(file, 'demo');
-		const temp = setup({
-			obtainDemo: vi.fn(() => Promise.resolve({ path: file, temporary: true }))
+	it('keeps the demos, and the matches that point to them past the usual month', async () => {
+		const { fetcher, sent } = setup();
+		fetcher.remember(real);
+		await fetcher.run();
+		expect(sent).toHaveLength(1);
+		const file = join(dir, 'demo.dem');
+		expect(existsSync(file)).toBe(true);
+		const saved = { file, playdemo: 'playdemo demo' };
+		expect(fetcher.demoFor(real.id)).toEqual(saved);
+		expect(fetcher.demoFor(crypto.randomUUID())).toBeNull();
+
+		const later = { now: ended + 40 * 24 * HOUR };
+		expect(setup({}, later).fetcher.demoFor(real.id)).toEqual(saved);
+		rmSync(file);
+		expect(setup({}, later).fetcher.view().jobs).toEqual([]);
+		expect(readdirSync(join(dir, 'jobs'))).toEqual([]);
+	});
+
+	it('saves the demos of the listed matches you played whenever it asks Steam', async () => {
+		const unrecorded: GcMatch = { ...listed, matchId: '43', matchTime: listed.matchTime - HOUR };
+		const notMine: GcMatch = { ...listed, matchId: '44', accountIds: [7] };
+		// A finished match from before demos were kept: it has none yet.
+		mkdirSync(join(dir, 'jobs'));
+		const old = { record: real, status: 'done', attempts: 0, message: null, updatedAt: 0 };
+		writeFileSync(join(dir, 'jobs', `${real.id}.json`), JSON.stringify(old));
+		const { fetcher, deps } = setup({
+			recentMatches: vi.fn(() =>
+				Promise.resolve({ accountId: accountIdOf(ME), matches: [listed, unrecorded, notMine] })
+			),
+			obtainDemo: vi.fn((match: GcMatch) => {
+				const file = join(dir, `${match.matchId}.dem`);
+				const downloaded = !existsSync(file);
+				writeFileSync(file, 'demo');
+				return Promise.resolve({ path: file, downloaded });
+			})
 		});
-		temp.fetcher.remember(real);
-		await temp.fetcher.run();
-		expect(temp.sent).toHaveLength(1);
-		expect(existsSync(file)).toBe(false);
+
+		// Nothing is waiting, but asked to check, it goes to Steam for the demos.
+		await fetcher.run({ retry: true });
+		expect(vi.mocked(deps.obtainDemo).mock.calls.map(([m]) => m.matchId)).toEqual(['42', '43']);
+		expect(fetcher.view().message).toBe('Saved 2 demos.');
+		expect(fetcher.demoFor(real.id)?.file).toBe(join(dir, '42.dem'));
+
+		// The next time, only the one no match points to is looked for again, and found.
+		await fetcher.run({ retry: true });
+		expect(vi.mocked(deps.obtainDemo).mock.calls.map(([m]) => m.matchId)).toEqual([
+			'42',
+			'43',
+			'43'
+		]);
+		expect(fetcher.view().message).toBeNull();
 	});
 });

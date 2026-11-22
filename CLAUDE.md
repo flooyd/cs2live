@@ -29,7 +29,9 @@ SvelteKit **3** (not 2), Svelte 5 runes, TypeScript 6, yarn 1, drizzle-orm + pos
   official match without damage as a job (`src/lib/server/demos/`). Once CS2 is closed it asks
   Steam's Game Coordinator for recent matches with `@akiver/boiler-writter` (fails while CS2 runs),
   downloads the demo, parses it with `@laihoe/demoparser2` (native) and re-sends the match through
-  the outbox. Both are runtime `dependencies`, loaded with `createRequire` from a variable so
+  the outbox. Demos are **kept** for watching: saved in CS2's `game/csgo/replays` under CS2's own
+  names with a `.dem.info` (so `playdemo replays/…` works), and every Steam pass also saves the
+  missing demos of listed matches. Both are runtime `dependencies`, loaded with `createRequire` from a variable so
   Vercel's tracer leaves their binaries out of the site bundle. `/setup` can also **import** the
   listed matches CS2Live never recorded, built entirely from the demo (`demo-record.ts`,
   `origin = 'demo'`); its field meanings must stay in step with `round-builder.ts`.

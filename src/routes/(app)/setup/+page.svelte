@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
 	import SteamIdForm from '#lib/live/components/SteamIdForm.svelte';
+	import CopyButton from '#lib/components/CopyButton.svelte';
 	import { ago, dateTime, fixed } from '#lib/format.ts';
 	import { profileUrl } from '#lib/cs2/steamid.ts';
 	import { mapLabel, modeLabel } from '#lib/cs2/modes.ts';
@@ -21,6 +22,8 @@
 		'no-demo': 'No demo',
 		failed: 'Failed'
 	} as const;
+	const fileSize = (bytes: number) =>
+		bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1e6))} MB`;
 </script>
 
 <svelte:head><title>Setup · CS2Live</title></svelte:head>
@@ -185,7 +188,13 @@
 					CS2Live asks Steam for the match demo once you've closed CS2, reads your damage from it
 					and updates the match. Steam has to be running, and while CS2Live asks, Steam shows you as
 					playing CS2 for a few seconds. Steam only lists your last few matches, so close CS2 now
-					and then. Downloaded demos (about 25 MB each) are deleted afterwards.
+					and then.
+				</p>
+				<p class="muted">
+					CS2Live keeps the demos so you can watch them later. Each time it asks Steam, it also
+					downloads the demo of every listed match you played that isn't on this PC yet. They go in
+					CS2's replays folder with the names CS2 gives its own downloads. To watch one, copy its
+					<code>playdemo</code> command below (or from the match's page) into CS2's console.
 				</p>
 				<p class="muted">
 					<strong>Import recent matches</strong> adds the matches in that list that CS2Live didn't record
@@ -235,6 +244,15 @@
 					{#if demos.message}<span class="muted">{demos.message}</span>{/if}
 					{#if demos.lastRunAt}<span class="dim">asked Steam {ago(demos.lastRunAt)}</span>{/if}
 				</div>
+				<div class="syncstate">
+					<span class="label">Saved</span>
+					<span>
+						{demos.saved.count} demo{demos.saved.count === 1 ? '' : 's'}{demos.saved.count
+							? `, ${fileSize(demos.saved.bytes)}`
+							: ''}
+					</span>
+					<code class="path dim small">{demos.saved.dir}</code>
+				</div>
 				{#if demos.jobs.length}
 					<div class="jobs">
 						<table class="data">
@@ -263,6 +281,13 @@
 											{#if job.message && !job.imported}<div class="dim small">
 													{job.message}
 												</div>{/if}
+											{#if job.demo?.playdemo}
+												<div class="watch">
+													<CopyButton text={job.demo.playdemo} label="Copy playdemo" />
+												</div>
+											{:else if job.demo}
+												<div class="dim small" title={job.demo.file}>Demo saved</div>
+											{/if}
 										</td>
 										<td class="r num">{job.status === 'done' ? fixed(job.adr) : '—'}</td>
 									</tr>
@@ -343,6 +368,12 @@
 	.jobs td.status {
 		white-space: normal;
 		min-width: 12rem;
+	}
+	.jobs .watch {
+		margin-top: 0.3rem;
+	}
+	code.path {
+		overflow-wrap: anywhere;
 	}
 	.sync label.toggle {
 		display: flex;

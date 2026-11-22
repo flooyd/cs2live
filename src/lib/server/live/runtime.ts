@@ -10,7 +10,7 @@ import type { SettingsFile } from './settings.ts';
 import type { LiveView, SyncView } from '#lib/live/types.ts';
 import type { MatchRecord } from '#lib/match-record.ts';
 import type { RawPayloadSink } from '../db/raw-payloads.ts';
-import type { DemoView } from '../demos/fetcher.ts';
+import type { DemoView, SavedDemo } from '../demos/fetcher.ts';
 
 /** Where finished matches go (the outbox, which uploads or writes to the database). */
 export interface MatchSink {
@@ -27,6 +27,7 @@ export interface DemoQueue {
 	run(opts?: { retry?: boolean }): Promise<void>;
 	importRecent(): Promise<void>;
 	view(): DemoView;
+	demoFor(matchId: string): SavedDemo | null;
 }
 
 export const NULL_SINK: MatchSink = {

@@ -126,7 +126,8 @@ describe('live runtime', () => {
 			importRecent: () => Promise.resolve(),
 			view: () => {
 				throw new Error('not used');
-			}
+			},
+			demoFor: () => null
 		};
 		play(rt, 'real/wingman-inferno');
 		expect(remembered).toEqual(saved);
