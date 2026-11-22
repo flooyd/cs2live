@@ -1,125 +1,233 @@
+<div align="center">
+
 # CS2Live
 
-A Counter-Strike 2 companion app. It reads CS2's Game State Integration (GSI) feed while you
-play, shows a live dashboard on a second monitor, saves every match with a per-round
-breakdown, and serves match history and stats on a public site where anyone can look up a
-Steam ID.
+**Your Counter-Strike 2 matches, live on your second screen and saved round by round.**
 
-## How it fits together
+A small app that runs next to CS2, shows what's happening in your match as you play, and keeps
+every game, with your damage, economy and stats, on a site your friends can look you up on.
 
+![SvelteKit 3](https://img.shields.io/badge/SvelteKit-3-FF3E00?logo=svelte&logoColor=white)
+![Svelte 5](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)
+![Postgres](https://img.shields.io/badge/Postgres-Neon-00E599?logo=postgresql&logoColor=white)
+
+[What you get](#what-you-get) · [Quick start](#quick-start) ·
+[Playing with friends](#playing-with-friends) · [Hosting the site](#hosting-the-site)
+
+</div>
+
+<br>
+
+![The live view on a second monitor: score, round history, your health, money and weapon, match stats, net worth over the match and next round's money](docs/screenshots/live.png)
+
+<p align="center"><sub>The live view, mid-match. All screenshots use simulated matches.</sub></p>
+
+## What you get
+
+- 🖥️ **A live dashboard** for your second monitor: score, round history, health, money, your
+  weapon, kills and ADR, your net worth over the match and what you'll have next round.
+- 🎥 **A stream overlay** for OBS, a compact card with the same essentials.
+- 📼 **Every match saved**, round by round: who won each round and how, your kills, damage,
+  buy and money. Quit early or crash? It's kept as _incomplete_ and picks up again if you
+  reconnect.
+- 💥 **Real damage numbers.** After a Premier, Competitive or Wingman match, CS2Live fetches
+  the official match demo and reads your damage from it.
+- 🎬 **Demos to rewatch.** Those demos are kept in CS2's replay folder, ready for `playdemo`.
+- 📈 **Stats over time**: win rate by map and mode, CT vs T, buy types, multi-kills, weapons
+  and recent form.
+- 👥 **Shared with friends.** Everyone runs their own copy and uploads to one site, where anyone
+  can look up a Steam ID.
+
+## A quick tour
+
+### While you play
+
+The live view (top of this page) is made for a second monitor. For streaming, add the overlay to
+OBS as a Browser Source:
+
+<p align="center">
+  <img src="docs/screenshots/overlay.png" width="560" alt="The stream overlay: score, round history, health, armor, money, weapon, K/A/D, ADR and headshot percentage">
+</p>
+
+### After the match
+
+Each match gets its own page: the result, your round-by-round damage with standout rounds
+called out, your economy across the game, and a full round-by-round table.
+
+![A match page: Mirage won 13 to 11, with damage per round and economy charts](docs/screenshots/match.png)
+
+### Over time
+
+Your stats page brings it all together, filterable by map, mode and time.
+
+![A player's stats page: matches, win rate, K/D, ADR, recent form, CT vs T, multi-kill rounds and a per-map table](docs/screenshots/stats.png)
+
+### Look anyone up
+
+The public site lists the latest matches from everyone using it. Search for a Steam ID to see
+someone's games, including ones where a friend spectated them.
+
+![The lookup page: a search box for a Steam ID, link or name, and the latest matches recorded by anyone](docs/screenshots/lookup.png)
+
+## How it works
+
+CS2 has a built-in feature called **Game State Integration** (GSI): give it a small config file
+and it posts the state of your game to a local web address whenever something changes (up to
+ten times a second). CS2Live listens on that address.
+
+```mermaid
+flowchart LR
+    cs2["CS2 on your PC"] -->|game state, as it changes| local["CS2Live on your PC"]
+    local --> screens["Live view and overlay"]
+    steam["Steam: official match demo"] -.->|damage, after you close CS2| local
+    local -->|finished match| site["CS2Live site (Vercel)"]
+    friends["Your friends' copies"] -->|their matches| site
+    site <--> db[("Postgres (Neon)")]
+    anyone["Anyone"] -->|look up a Steam ID| site
 ```
- CS2 (your PC) ──GSI POST──▶ CS2Live, running locally (yarn live)
-                              ├─ /live, /overlay   live dashboard over SSE
-                              └─ finished match ──▶ the CS2Live site (Vercel) ──▶ Neon Postgres
-                                                     ├─ /            look up any Steam ID
-                                                     ├─ /players/…   match history and stats
-                                                     └─ /matches/…   match detail
-```
 
-- **Live tracking only runs locally.** CS2 posts to a URL on your own machine, and live state
-  needs a long-running process. Vercel's serverless functions can't hold that state.
-- **The site holds the database.** Your local copy uploads each finished match to the site with
-  your upload key. Friends can run CS2Live too; nobody but the site needs the Neon password.
-  (The site owner can instead set `DATABASE_URL` locally and write straight to Neon.)
-- **GSI only describes you.** While you play, CS2 sends your own state, team scores and round
-  results. It sends a teammate's state only while you're dead and spectating them, and it
-  never sends enemies. So there is no 10-player scoreboard. Teammates you spectate are saved as
-  _partial sightings_, so they can still find those matches by Steam ID.
+- **Live tracking runs on your PC.** CS2 can only post to your own machine, and the live view
+  needs a program that stays running.
+- **The site holds the history.** Your copy uploads each finished match with your personal
+  upload key. Only the site needs the database password.
+- **Nothing is lost.** Finished matches wait in `.cs2live/outbox/` until they're saved, so a
+  network blip or a site outage just delays them.
 
-## Setup
+> [!NOTE]
+> **CS2 only tells you about you.** While you play, GSI sends your own state, the team scores and
+> round results. It sends a teammate's state only while you're dead and spectating them, and
+> never anything about enemies. So there's no 10-player scoreboard. Teammates you spectate are
+> saved as _partial sightings_, so they can still find those games.
+>
+> Some numbers are worked out rather than reported (kills per weapon, buy type, the round
+> timer). The app underlines these with dots, and [`STATS.md`](STATS.md) explains how every
+> number is calculated.
 
-Requires Node 22.17+ and yarn 1.
+## Quick start
+
+You'll need [Node.js](https://nodejs.org) 22.18 or newer, [Yarn 1](https://classic.yarnpkg.com)
+and CS2. CS2Live is built and tested on Windows.
+
+**1. Install**
 
 ```sh
+git clone https://github.com/<you>/cs2live.git
+cd cs2live
 yarn install
-cp .env.example .env    # then fill it in, see below
+cp .env.example .env
 ```
 
-### Installing the CS2 GSI config
+**2. Connect CS2**
 
-CS2 sends game state to every `gamestate_integration_*.cfg` file in its cfg folder.
+```sh
+yarn gsi:config --install
+```
 
-1. Generate the config. This writes `.cs2live/gamestate_integration_cs2live.cfg`, and creates
-   `GSI_TOKEN` in `.env` if you don't have one yet:
+This writes the GSI config (with a fresh secret token) and copies it into CS2's `cfg` folder.
+Then **restart CS2**: it only reads these configs at startup.
 
-   ```sh
-   yarn gsi:config            # write the file and print where it goes
-   yarn gsi:config --install  # ...and copy it into CS2's cfg folder
-   ```
+**3. Start CS2Live**
 
-   The cfg folder is
-   `...\Steam\steamapps\common\Counter-Strike Global Offensive\game\csgo\cfg\`. The script finds
-   it through Steam's library list; set `CS2_CFG_DIR` if yours is somewhere unusual.
+```sh
+yarn live
+```
 
-2. **Restart CS2.** It only reads GSI configs at startup.
-3. Start CS2Live (`yarn live`, or `yarn dev` while developing) and open
-   <http://localhost:5173/live>. On first run it asks for your Steam ID.
+Open <http://localhost:5173/setup>, enter your Steam ID and check that CS2 is sending data. Then
+open <http://localhost:5173/live> on your second screen and play.
 
-The config posts to `http://127.0.0.1:5173/api/gsi`. Change `GSI_URL` in `.env` and rerun
-`yarn gsi:config --install` if you use another port. Re-run it whenever you change `GSI_TOKEN`.
+To keep a match history, CS2Live needs somewhere to save it: a CS2Live site (a friend's, see
+below, or [your own](#hosting-the-site)), or a Postgres database of your own in `DATABASE_URL`.
+Until then, finished matches wait safely in the outbox.
 
-## Using it while you play
+> [!TIP]
+> No CS2 handy? Run `yarn dev`, then replay a recorded match into it:
+> `yarn gsi:replay fixtures/synthetic/full-match.ndjson --speed 20 --as <your Steam ID>`
 
-- **`/live`**: the full-screen live view for a second monitor: health, money, weapons, round
-  history, your match stats and an estimate of next round's money.
-- **`/overlay`**: a compact, transparent card for OBS (add it as a Browser Source;
-  `?scale=1.5` makes it bigger).
-- **`/setup`**: your Steam ID, a check that CS2 is sending data, and where matches are saved.
+## While you play
 
-A match is saved when it reaches the scoreboard. If you leave, crash or alt-F4, it is saved as
-_incomplete_ after two minutes without in-match data, and continues as the same match if you
-reconnect.
+| Page                                        | What it's for                                                                                |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| [`/live`](http://localhost:5173/live)       | The full-screen live view for a second monitor.                                              |
+| [`/overlay`](http://localhost:5173/overlay) | A transparent card for OBS. Add it as a Browser Source; `?scale=1.5` makes it bigger.        |
+| [`/setup`](http://localhost:5173/setup)     | Your Steam ID, a check that CS2 is sending data, where matches are saved, and demo settings. |
+
+A match is saved when it reaches the scoreboard. If you leave, crash or alt-F4, it's saved as
+_incomplete_ after two minutes, and continues as the same match if you reconnect.
+
+### Damage and demos
+
+CS2 doesn't send damage while you play, but Valve keeps a demo of every official match. After a
+Premier, Competitive or Wingman match, **once you've closed CS2**, CS2Live asks Steam for the
+demo, reads your damage from it and updates the match. Steam needs to be running, and it will
+show you as "playing CS2" for a few seconds while it asks.
+
+- **Watch them later.** Demos are saved in CS2's `replays` folder under CS2's own names. Each
+  match page (and `/setup`) has the `playdemo` command to paste into CS2's console.
+- **Import older games.** **Import recent matches** on `/setup` adds the official matches Steam
+  still lists that CS2Live didn't record, built entirely from their demos.
+- **Steam only lists your last few matches**, so close CS2 now and then.
+- Don't want any of this? Untick **Fill in damage from match demos** on `/setup`.
 
 ## Playing with friends
 
-Each friend runs their own copy and uploads to the shared site:
+Each friend runs their own copy and uploads to one shared site.
 
-1. The site owner adds the friend's email to `SIGNUP_ALLOWLIST` on Vercel.
-2. The friend signs up on the site, opens **Account**, claims their Steam ID and creates an
-   **upload key** (shown once).
-3. The friend installs CS2Live (Node 22.17+, yarn 1):
-   ```sh
-   git clone <repo> cs2live && cd cs2live
-   yarn install
-   yarn gsi:config --install   # then restart CS2
-   yarn live
-   ```
-4. On <http://localhost:5173/setup> they enter their Steam ID, the site URL and the upload key.
-   **Test connection** checks the key.
+1. **The site owner** adds the friend's email to `SIGNUP_ALLOWLIST` on Vercel.
+2. **The friend** signs up on the site, opens **Account**, claims their Steam ID and creates an
+   **upload key** (it's shown once, so copy it).
+3. They install CS2Live with the [quick start](#quick-start) above.
+4. On their local `/setup` page they enter their Steam ID, the site's URL and the upload key.
+   **Test connection** checks that the key works.
 
-Finished matches are written to `.cs2live/outbox/` first and uploaded from there, so nothing
-is lost while the site or the network is down; CS2Live retries with a growing delay, on the next start, and when the
-settings are saved. A wrong or revoked key pauses uploads until you save a new one. A match the site rejects outright (a bad file) is moved to
-`.cs2live/outbox/rejected/`.
+From then on every finished match uploads automatically. If the site is down CS2Live retries
+with a growing delay; if the key is wrong or revoked, uploads pause until a new one is saved.
 
-On the site anyone can look up a Steam ID. A player's list shows matches they recorded, plus
-_partial sightings_: games where a friend spectated them, with their stats as last seen.
+## Hosting the site
 
-## Deploying the site (Vercel + Neon)
+The public site runs on [Vercel](https://vercel.com) with a [Neon](https://neon.tech) Postgres
+database. Live tracking switches itself off there.
 
-1. Create a Neon database. The Vercel Neon integration sets `DATABASE_URL` (pooled) and
+<details>
+<summary><b>Step-by-step: Vercel + Neon</b></summary>
+
+1. Create a Neon database. Vercel's Neon integration sets `DATABASE_URL` (pooled) and
    `DATABASE_URL_UNPOOLED` (direct) for you.
 2. Import the repo into Vercel (framework: SvelteKit) and set:
 
-   | Variable                | Value                                                                                     |
-   | ----------------------- | ----------------------------------------------------------------------------------------- |
-   | `DATABASE_URL`          | Neon pooled URL (`…-pooler…/neondb?sslmode=require`)                                      |
-   | `DATABASE_URL_UNPOOLED` | Neon direct URL, used for migrations                                                      |
-   | `BETTER_AUTH_SECRET`    | 32+ random characters                                                                     |
-   | `ORIGIN`                | the site's URL, e.g. `https://cs2live.vercel.app`                                         |
-   | `SIGNUP_ALLOWLIST`      | emails allowed to sign up, comma-separated (`*` = anyone). Empty = only the first account |
+   | Variable                | Value                                                                                      |
+   | ----------------------- | ------------------------------------------------------------------------------------------ |
+   | `DATABASE_URL`          | Neon pooled URL (`…-pooler…/neondb?sslmode=require`)                                       |
+   | `DATABASE_URL_UNPOOLED` | Neon direct URL, used for migrations                                                       |
+   | `BETTER_AUTH_SECRET`    | 32+ random characters                                                                      |
+   | `ORIGIN`                | The site's URL, e.g. `https://cs2live.vercel.app`                                          |
+   | `SIGNUP_ALLOWLIST`      | Emails allowed to sign up, comma-separated (`*` = anyone). Empty = only the first account. |
 
-   Live tracking is off on Vercel automatically.
-
-3. Run the migrations against Neon from your machine (put the Neon URLs in `.env` first):
-   `yarn db:migrate`. Do this again before deploying a change that adds a migration.
+3. Put the Neon URLs in your local `.env` and run the migrations: `yarn db:migrate`. Do this
+   again before deploying a change that adds a migration.
 4. Open the site, sign up (the first account is always allowed), claim your Steam ID and create
-   an upload key, then enter the site URL and key on your local `/setup`.
+   an upload key. Enter the site URL and key on your local `/setup`.
 
-The site owner can instead put `DATABASE_URL` in their local `.env`: that copy then writes
-straight to Neon and needs no upload key.
+As the site owner you can instead put `DATABASE_URL` in your local `.env`: your copy then writes
+straight to the database and needs no upload key.
 
-## Commands
+</details>
+
+## Good to know
+
+- **No enemy data, no full scoreboard.** GSI only describes you and whoever you spectate. Kills
+  per weapon and headshots are inferred from your own counters as they change.
+- **Damage needs the demo.** Until it's fetched (or for unofficial matches), damage shows as
+  unknown rather than zero.
+- **Custom profile URLs** (`/id/name`) can't be resolved without a Steam Web API key. Search by
+  SteamID64 or a `/profiles/7656…` link; names work for players the site already knows.
+- **Steam IDs aren't verified.** The first account to claim one gets it. That's fine among
+  friends; a public site would want Steam login.
+
+## Development
+
+<details>
+<summary><b>Commands</b></summary>
 
 | Command                   | What it does                                                          |
 | ------------------------- | --------------------------------------------------------------------- |
@@ -130,6 +238,7 @@ straight to Neon and needs no upload key.
 | `yarn gsi:replay <file>`  | Replay a GSI capture or fixture into a running server                 |
 | `yarn gsi:anonymise`      | Trim and anonymise a real capture into a fixture                      |
 | `yarn gsi:fixtures`       | Regenerate the synthetic fixtures from the simulator                  |
+| `yarn demo:damage`        | Read the damage for a Steam ID from a demo (`<demo\|latest> <id>`)    |
 | `yarn run check`          | svelte-check (note: `yarn check` is yarn's own, unrelated command)    |
 | `yarn lint` / `yarn test` | Prettier + ESLint / Vitest                                            |
 | `yarn verify:replay`      | End-to-end check: replay a fixture, expect exactly one saved match    |
@@ -139,27 +248,25 @@ straight to Neon and needs no upload key.
 | `yarn db:cleanup`         | Delete stored raw payloads older than 30 days (`--days`, `--dry-run`) |
 | `yarn db:studio`          | Drizzle Studio                                                        |
 
-## Development
+</details>
 
-- **Tests.** `yarn test` runs unit tests everywhere. The database tests (`*.db.spec.ts`) need
-  `TEST_DATABASE_URL`: any Postgres database whose name contains `test` (its tables are
-  truncated). Without it they are skipped.
+<details>
+<summary><b>Working on CS2Live</b></summary>
+
+- **Stack:** SvelteKit 3 with Svelte 5, TypeScript, drizzle-orm on Postgres, better-auth, zod
+  and Vitest. Demos are parsed with `@laihoe/demoparser2`.
 - **No CS2 needed.** Replay a fixture (`yarn gsi:replay fixtures/synthetic/full-match.ndjson
 --speed 20`) and seed a database (`yarn db:seed`) to work on any page.
-- **Real captures.** `GSI_CAPTURE=1` records every payload to `captures/`. Please capture a
-  real match: see `fixtures/README.md`.
-- **What's measured and what's guessed:** `STATS.md` defines every number and tags it observed,
-  derived, inferred, estimated or partial. The UI underlines inferred values with dots.
-- Notes for Claude Code (conventions, skills) are in `CLAUDE.md` and `.claude/skills/`.
-
-## Limitations
-
-- GSI only describes you and whoever you spectate. There is no data about enemies, no full
-  scoreboard, no kill feed (kills, headshots and weapons are inferred), and damage you deal is
-  not updated after you die.
-- Custom Steam profile URLs (`/id/name`) can't be resolved without a Steam Web API key; search
-  by SteamID64 or a `/profiles/7656…` link (name search works for known players).
-- Steam ID ownership isn't verified: the first account to claim a Steam ID gets it. Fine among
-  friends; a Steam OpenID login would be needed for a public site.
-- On Windows, `yarn build` needs Developer Mode (the Vercel adapter creates symlinks). Vercel
+- **Tests.** `yarn test` runs the unit tests. The database tests (`*.db.spec.ts`) also need
+  `TEST_DATABASE_URL`: any Postgres database whose name contains `test` (its tables are
+  emptied). Without it they're skipped.
+- **Real captures help.** `GSI_CAPTURE=1` records every payload to `captures/`. See
+  [`fixtures/README.md`](fixtures/README.md) for how to anonymise and share one.
+- **Measured vs guessed:** [`STATS.md`](STATS.md) defines every number and tags it observed,
+  derived, inferred, estimated or partial.
+- **Windows:** `yarn build` needs Developer Mode (the Vercel adapter creates symlinks). Vercel
   itself builds on Linux.
+- Notes for Claude Code (conventions and project skills) live in [`CLAUDE.md`](CLAUDE.md) and
+  `.claude/skills/`.
+
+</details>
