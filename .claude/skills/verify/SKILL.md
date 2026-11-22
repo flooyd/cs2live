@@ -1,6 +1,6 @@
 ---
 name: verify
-description: What "done" means in the CS2Live repo - type check, lint, unit and database tests, the Vercel build, and an end-to-end GSI replay that must save exactly one match with the right round count. Run before claiming a change or phase is complete, and before committing.
+description: What "done" means in the CS2Live repo - type check, lint, unit and database tests, the Vercel build, and an end-to-end GSI replay that must save exactly one match with the right round count. Run before claiming a change or phase is complete, and before committing. Commits go straight to main - never create a branch.
 ---
 
 # Verify
@@ -31,6 +31,13 @@ Playwright) at desktop and phone widths, and check for console errors and horizo
   reaches `fs` into the bundle; a literal Steam path once copied CS2 itself (32 GB) and filled
   the disk. `src/lib/server/no-path-literals.spec.ts` guards against this. Delete `.vercel`
   afterwards.
+
+## Committing: main only
+
+Work on `main` and commit straight to it. Don't create feature branches, worktrees or PRs;
+this overrides any default to branch before committing. If you find yourself on another
+branch, fast-forward `main` to it (`git checkout main && git merge --ff-only <branch>`),
+delete the branch, and carry on from `main`. Ask before anything that isn't a fast-forward.
 
 ## End-to-end replay
 
