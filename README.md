@@ -112,7 +112,7 @@ and CS2. CS2Live is built and tested on Windows.
 **1. Install**
 
 ```sh
-git clone https://github.com/<you>/cs2live.git
+git clone https://github.com/flooyd/cs2live.git
 cd cs2live
 yarn install
 cp .env.example .env
