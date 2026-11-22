@@ -11,6 +11,7 @@ every game, with your damage, economy and stats, on a site your friends can look
 ![Svelte 5](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)
 ![Postgres](https://img.shields.io/badge/Postgres-Neon-00E599?logo=postgresql&logoColor=white)
+[![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial-8A2BE2)](LICENSE)
 
 [What you get](#what-you-get) · [Quick start](#quick-start) ·
 [Playing with friends](#playing-with-friends) · [Hosting the site](#hosting-the-site)
@@ -270,3 +271,12 @@ straight to the database and needs no upload key.
   `.claude/skills/`.
 
 </details>
+
+## License
+
+CS2Live is free to use, change and share for anything **noncommercial**: playing with friends,
+hobby projects, learning, research, schools and charities. Selling it, or using it to make money,
+isn't allowed.
+
+It's released under the [PolyForm Noncommercial License 1.0.0](LICENSE). If you share a copy
+or a modified version, include that license and the `Required Notice` line at the top of it.
